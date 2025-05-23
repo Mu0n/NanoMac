@@ -30,9 +30,12 @@ Planned features:
 
 ## What's needed?
 
-  * ```nanomac.fs``` needs to be flashed to the FPGA's flash memory
-    * ```openFPGALoader -f nanomac.fs```
-  * On Nano 20k a mac plus rom (e.g. ```plusrom.bin``` from the original PlusToo archive) needs to be flashed to offset 0x480000
-    * ```openFPGALoader --external-flash -o 0x480000 plusrom.bin```
-  * The [latest FPGA Companion firmware](http://github.com/harbaum/FPGA-Companion) needs to be flashed to the support MCU
+  * The Tang Nano 20k to run the PlusToo core itself
+    * ```nanomac.fs``` needs to be flashed to the FPGA's flash memory
+      * ```openFPGALoader -f nanomac.fs```
+    * A mac plus rom (e.g. ```plusrom.bin``` from the original PlusToo archive) needs to be flashed to offset 0x480000
+      * ```openFPGALoader --external-flash -o 0x480000 plusrom.bin```
+  * A support MCU for USB keyboard and mouse and overall system control      
+     * Attached via breadboard or e.g. through a [custom carrier board](https://github.com/harbaum/MiSTeryNano/tree/main/board/misteryshield20k_lite)
+     * Running the [FPGA Companion firmware](http://github.com/harbaum/FPGA-Companion)
   * At least one disk image in ```DSK``` format (819200 bytes in in size) containing e.g. [System 3.0](https://winworldpc.com/product/mac-os-0-6/system-3x) has to be placed on an SD card
