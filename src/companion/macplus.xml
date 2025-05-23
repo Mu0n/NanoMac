@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MacPlus/NanoMac configuration -->
+<config name="NanoMac" version="0">
+  <actions>
+    <!-- the init action is being executed immediately -->
+    <!-- when this file has been loaded -->
+    <action name="init">
+      <!-- (try to) load config from sd card -->
+      <load file="macplus.ini"/>
+      <set id="R" value="1"/>  <!-- keep machine in reset -->
+    </action>
+    
+    <!-- the ready action is being executed once all -->
+    <!-- initialization has been done -->
+    <action name="ready">
+      <set id="R" value="0"/>  <!-- release reset -->
+    </action>
+      
+    <action name="save">
+      <!-- save config to sd card -->
+      <save file="macplus.ini"/>
+    </action>
+      
+    <action name="reset">
+      <!-- trigger a system reset -->
+      <set id="R" value="1"/>
+      <delay ms="10"/>
+      <set id="R" value="0"/>      
+    </action>
+    
+    <action name="reset_hide">
+      <!-- trigger a system reset and hide OSD -->
+      <link action="reset"/>
+      <hide/>      
+    </action>      
+  </actions>
+  
+  <menu label="NanoMac">
+    <fileselector label="Int. Floppy:" ext="dsk" index="0"/>
+    <fileselector label="Ext. Floppy:" ext="dsk" index="1"/>
+    <list label="Memory:" id="Y" default="2" action="reset">
+      <listentry label="128kB" value="0"/>
+      <listentry label="512kB" value="1"/>
+      <listentry label="1MB" value="2"/>
+      <listentry label="4MB" value="3"/>
+    </list>
+    <button label="Save settings" action="save"/>
+    <button label="Reset" action="reset_hide"/>
+  </menu>    
+</config>

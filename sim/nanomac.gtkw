@@ -1,0 +1,118 @@
+[*]
+[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
+[*] Fri May 23 08:29:18 2025
+[*]
+[dumpfile] "nanomac.fst"
+[dumpfile_mtime] "Fri May 23 08:27:39 2025"
+[dumpfile_size] 50311129
+[savefile] "nanomac.gtkw"
+[timestart] 2286370000000
+[size] 2257 1223
+[pos] 64 95
+*-31.600285 2300000090818 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.nanomac_tb.
+[treeopen] TOP.nanomac_tb.macplus.
+[treeopen] TOP.nanomac_tb.macplus.ac0.
+[treeopen] TOP.nanomac_tb.macplus.dc0.
+[treeopen] TOP.nanomac_tb.macplus.dc0.i.
+[treeopen] TOP.nanomac_tb.macplus.dc0.i.floppyExt.
+[treeopen] TOP.nanomac_tb.macplus.dc0.i.floppyInt.
+[treeopen] TOP.nanomac_tb.macplus.dc0.i.floppyInt.enc.
+[sst_width] 265
+[signals_width] 291
+[sst_expanded] 1
+[sst_vpaned_height] 424
+@28
+TOP.clk
+TOP.nanomac_tb.reset
+TOP.nanomac_tb.macplus.fx68k.Clks_enPhi1
+TOP.nanomac_tb.macplus.fx68k.Clks_enPhi2
+@24
+TOP.nanomac_tb.macplus.busPhase[2:0]
+@d00022
+TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+@28
+(0)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(1)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(2)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(3)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(4)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(5)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(6)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(7)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(8)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(9)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(10)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(11)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(12)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(13)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(14)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(15)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(16)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(17)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(18)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(19)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(20)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(21)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+(22)TOP.nanomac_tb.macplus.fx68k.eab[23:1]
+@1401200
+-group_end
+@28
+TOP.nanomac_tb.macplus._cpuAS
+TOP.nanomac_tb.macplus._cpuAS_R
+TOP.nanomac_tb.macplus._cpuLDS
+TOP.nanomac_tb.macplus._cpuUDS
+TOP.nanomac_tb.macplus.fx68k.DTACKn
+[color] 3
+TOP.nanomac_tb.macplus.dc0.selectIWM
+@22
+TOP.nanomac_tb.macplus.dc0.i.floppyInt.driveReadAddr[3:0]
+@28
+TOP.nanomac_tb.sdram_we
+@22
+TOP.nanomac_tb.macplus.dc0.iwmDataOut[15:0]
+@28
+TOP.nanomac_tb.macplus.dc0.i.floppyInt.enc.strobe
+TOP.nanomac_tb.macplus.dc0.i.floppyInt.enc.cnt[1:0]
+@22
+TOP.nanomac_tb.macplus.dc0.i.floppyInt.enc.state[3:0]
+@24
+TOP.nanomac_tb.macplus.dc0.i.floppyInt.enc.count[9:0]
+@28
+TOP.nanomac_tb.macplus.dc0.i.floppyInt.enc.ready
+TOP.nanomac_tb.macplus.dc0.i.floppyInt.newByteReady
+@22
+TOP.nanomac_tb.macplus.dc0.i.floppyInt.diskImageData[7:0]
+[color] 3
+TOP.nanomac_tb.macplus.dc0.i.floppyInt.driveTrack[6:0]
+@24
+TOP.nanomac_tb.macplus.dc0.i.floppyInt.diskDataByteTimer[6:0]
+@22
+TOP.nanomac_tb.macplus.dc0.i.floppyInt.enc.sector[3:0]
+@24
+TOP.nanomac_tb.macplus.dc0.i.floppyInt.enc.src_offset[8:0]
+@28
+TOP.nanomac_tb.macplus.ac0.vt.refresh
+TOP.nanomac_tb.macplus.ac0.vt.videoCycle
+TOP.nanomac_tb.macplus.dc0.kbdclk
+TOP.nanomac_tb.macplus.dc0.kbddat_i
+TOP.nanomac_tb.macplus.dc0.kbddata_o
+TOP.nanomac_tb.macplus.dc0.kbd.cmd_model
+TOP.nanomac_tb.macplus.dc0.kbd.cmd_inquiry
+TOP.nanomac_tb.macplus.dc0.kbd.tick_short
+TOP.nanomac_tb.macplus.dc0.kbd.tick_long
+TOP.nanomac_tb.macplus.dc0.kbd.strobe_in
+@22
+TOP.nanomac_tb.macplus.dc0.kbd.data_in[7:0]
+@28
+TOP.nanomac_tb.macplus.dc0.kbd_transmitting
+TOP.nanomac_tb.macplus.dc0.kbd_wait_receiving
+TOP.nanomac_tb.macplus.dc0.kbd_receiving
+TOP.nanomac_tb.macplus.dc0.kbd.key_pending
+@22
+TOP.nanomac_tb.macplus.dc0.kbd.keymac[9:0]
+@29
+TOP.nanomac_tb.macplus.dc0.kbd.got_key
+[pattern_trace] 1
+[pattern_trace] 0

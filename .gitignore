@@ -1,0 +1,9 @@
+*~
+*.vcd
+*.fst
+build/
+src/impl/gwsynthesis/**
+src/impl/temp/**
+src/impl/pnr/**
+!src/impl/nanomac_*.json
+*.user
