@@ -44,7 +44,7 @@ module dataController (
 	// mouse:
 	input [4:0]	       mouse,
 	input		       kbd_strobe,
-	input [7:0]	       kbd_data, 
+	input [9:0]	       kbd_data, 
 	
 	// serial:
 	input		       serialIn, 

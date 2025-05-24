@@ -163,7 +163,7 @@ wire sdc_int;
 // keyboard and mouse interface to Mac
 wire [4:0] mouse;  
 wire	   kbd_strobe;
-wire [7:0] kbd_data;   
+wire [9:0] kbd_data;   
    
 hid hid (
         .clk(clk_pixel),

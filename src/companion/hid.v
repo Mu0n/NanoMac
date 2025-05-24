@@ -23,7 +23,7 @@ module hid (
   // output HID data received from USB
   output [4:0]	   mouse,
   output reg	   kbd_strobe,
-  output [7:0]     kbd_data,
+  output [9:0]     kbd_data,
 
   output reg [7:0] joystick0,
   output reg [7:0] joystick1
@@ -48,15 +48,16 @@ reg [5:0] db9_portD;
 reg [5:0] db9_portD2;
 
 reg	  kbd_trigger;   
-reg [7:0] kbd_data_in;  
+reg [9:0] kbd_data_in;  
 
-wire [6:0] macplus_keycode;   
+wire [8:0] macplus_keycode;   
 keymap keymap (
  .code  ( kbd_data_in[6:0]  ),
  .mac   ( macplus_keycode )
 );  
 
-assign kbd_data = { kbd_data_in[7], macplus_keycode };   
+// 2 special modifier bits for extended key, 1 make/break bit and the code
+assign kbd_data = { macplus_keycode[8:7], kbd_data_in[7], macplus_keycode[6:0] };   
 	   
 // process hid events
 always @(posedge clk) begin
@@ -72,7 +73,7 @@ always @(posedge clk) begin
       db9_portD2 <= db9_portD;
 
       if(kbd_trigger) begin
-	 if(macplus_keycode != 7'h7f)
+	 if(macplus_keycode != 9'h7f)
 	   kbd_strobe <= !kbd_strobe;		 
 
 	 kbd_trigger <= 1'b0;

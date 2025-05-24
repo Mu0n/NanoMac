@@ -42,7 +42,7 @@ module macplus
         //MOUSE
 	input [5:0]   MOUSE,
 	input	      kbd_strobe,
-	input [7:0]   kbd_data,
+	input [9:0]   kbd_data,
 
 	//SD-SPI
 	output	      SD_SCK,

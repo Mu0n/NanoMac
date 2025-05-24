@@ -10,7 +10,7 @@ module keyboard (
     input	     reset,
 
     input	     kbd_strobe,
-    input [7:0]	     kbd_data,
+    input [9:0]	     kbd_data,
 		 
     // Mac Plus
     input [7:0]	     data_out,
@@ -19,19 +19,19 @@ module keyboard (
     output	     strobe_in
 );
 
-reg [9:0]	keymac;
-reg		key_pending;
-reg [19:0]	pacetimer;
-reg		inquiry_active;
-reg		got_key;
-wire		tick_short;
-wire		tick_long;
-wire		pop_key;
+reg [9:0]  keymac;
+reg	   key_pending;
+reg [19:0] pacetimer;
+reg	   inquiry_active;
+reg	   got_key;
+wire	   tick_short;
+wire	   tick_long;
+wire	   pop_key;
    
-reg	cmd_inquiry;
-reg	cmd_instant;
-reg	cmd_model;
-reg	cmd_test;
+reg	   cmd_inquiry;
+reg	   cmd_instant;
+reg	   cmd_model;
+reg	   cmd_test;
    
 /* --- Mac side --- */
 
@@ -130,7 +130,7 @@ always @(posedge clk) begin
    if(en) begin
       got_key <= 1'b0;	 
       if(kbd_strobe != strobe) begin
-	 keymac <= { 2'b00, kbd_data };
+	 keymac <= kbd_data;
 	 got_key <= 1'b1;	    
       end
       
@@ -142,7 +142,7 @@ end
 assign data_in = cmd_test    ? 8'h7d :
 		 cmd_model   ? 8'h0b :
 		 key_pending ? (keymac[9] & !keypad_byte3 ? {keymac[7],7'h71} :
-				((keymac[8] & !keypad_byte2) ? 8'h79 : keymac[7:0])) :
+			      ((keymac[8] & !keypad_byte2) ? 8'h79 : keymac[7:0])) :
 		 8'h7b;	
 
 endmodule
