@@ -18,8 +18,8 @@ static VerilatedFstC *trace;
 static double simulation_time;
 
 #define ROM "plusrom.bin"
-#define DISK_INT "system30.dsk"
-// #define DISK_EXT "Disk605.dsk"
+#define DISK_INT "../disks/system30.dsk"
+#define DISK_EXT "../disks/MacMan 1.0.dsk"
 
 #define TICKLEN   (0.5/16000000)
 
@@ -36,7 +36,7 @@ static double simulation_time;
 #endif
 
 // floppy disk lba to side/track/sector translation table
-int fdc_map[1600][3];
+int fdc_map[2][1600][3];
 
 /* =============================== video =================================== */
 
@@ -342,6 +342,7 @@ void tick(int c) {
       static int sdc_state = 0;
       static unsigned char sector_buffer[512];
       static int drive = -1;
+      static int sides[2] = {0,0};
 
       // simulate disk image insertion
       static int insert_counter = 0;
@@ -354,7 +355,9 @@ void tick(int c) {
 	  if(sdc_fd[d]) {
 	    fseek(sdc_fd[d], 0, SEEK_END);
 	    int size = ftell(sdc_fd[d]);
-	    printf("%.3fms SDC drive, %d mounting %s, size = %d\n", simulation_time*1000, d, disk_names[d], size);	  
+	    sides[d] = size > 800*512;
+	    printf("%.3fms SDC drive, %d mounting %s, size = %d (%s sided)\n",
+		   simulation_time*1000, d, disk_names[d], size, sides[d]?"double":"single");
 	    tb->image_size = size;
 	  }
 	}
@@ -374,9 +377,9 @@ void tick(int c) {
 	  
 	  printf("%.3fms SDC RD drv %d, lba %d = %d/%d/%d\n", simulation_time*1000,
 		 drive, tb->sdc_lba,
-		 fdc_map[tb->sdc_lba][0],
-		 fdc_map[tb->sdc_lba][1],
-		 fdc_map[tb->sdc_lba][2]);
+		 fdc_map[sides[drive]][tb->sdc_lba][0],
+		 fdc_map[sides[drive]][tb->sdc_lba][1],
+		 fdc_map[sides[drive]][tb->sdc_lba][2]);
 	  
 	  fseek(sdc_fd[drive], 512*tb->sdc_lba, SEEK_SET);
 	  if(fread(sector_buffer, 1, 512, sdc_fd[drive]) != 512) {
@@ -554,7 +557,8 @@ int main(int argc, char **argv) {
   simulation_time = 0;
 
   // create fdc lba map
-  int lba = 0;
+  int lba_ds = 0;
+  int lba_ss = 0;
   for(int track=0;track<80;track++) {
     int spt;
     if(track >= 64) spt = 8;
@@ -565,10 +569,15 @@ int main(int argc, char **argv) {
     
     for(int side=0;side<2;side++) {
       for(int sector=0;sector<spt;sector++) {
-	fdc_map[lba][0] = side;
-	fdc_map[lba][1] = track;
-	fdc_map[lba][2] = sector;
-	lba++;
+	if(side == 0) {
+	  fdc_map[0][lba_ss][0] = side;
+	  fdc_map[0][lba_ss][1] = track;
+	  fdc_map[0][lba_ss++][2] = sector;
+	}
+	
+	fdc_map[1][lba_ds][0] = side;
+	fdc_map[1][lba_ds][1] = track;
+	fdc_map[1][lba_ds++][2] = sector;
       }
     }
   }

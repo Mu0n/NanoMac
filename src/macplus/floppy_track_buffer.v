@@ -115,7 +115,7 @@ assign ready = (track_in_buffer == track_requested);
 always @(posedge clk)
   if((track_loader_state == 4'd0) && ready)
     data <= track_buffer[addr];  
-   
+
 // state machine to make sure the correct track is in buffer
 always @(posedge clk) begin
    if(rst) begin
@@ -134,9 +134,8 @@ always @(posedge clk) begin
 	   track_in_progress <= track_requested;	   
 	   track_spt <= spt;	   
 	   
-	   sd_lba <= { 1'b0, soff } +                  // sector offset for single sided disk
-		     (sides?{ 1'b0, soff }:11'd0)  +   // another sector offset * 512 for two sides
- 	             (side? { 6'd0, spt  }:11'd0);     // offset to other side
+	   sd_lba <= (sides[drive]?{soff,1'b0}:{1'b0,soff}) + // twice the sector offset for double sided disk
+ 	             (side? { 6'd0, spt  }:11'd0);            // offset to other side
 	end
 
 	// waiting for sd card to become busy
