@@ -9,6 +9,7 @@ module dataController (
 	// system control:
 	input		       machineType, // 0 - Mac Plus, 1 - Mac SE
 	input		       _systemReset,
+	input [1:0]	       floppy_wprot,
 
 	// 68000 CPU control:
 	output		       _cpuReset,
@@ -77,9 +78,11 @@ module dataController (
 	input [1:0]	       sdc_img_mounted,
 	output [10:0]	       sdc_lba,
 	output [1:0]	       sdc_rd,
+	output [1:0]	       sdc_wr,
 	input		       sdc_done,
 	input		       sdc_busy,
-	input [7:0]	       sdc_data,
+	input [7:0]	       sdc_data_in,
+	output [7:0]	       sdc_data_out,
 	input		       sdc_data_en,
 	input [8:0]	       sdc_addr,
  
@@ -431,6 +434,7 @@ module dataController (
 		.cpuAddrRegHi(cpuAddrRegHi),
 		.SEL(SEL),
 		.driveSel(driveSel),
+	        .diskWProt(floppy_wprot),
 		.dataOut(iwmDataOut),
 		.diskLED(diskLED),
 	      
@@ -439,9 +443,11 @@ module dataController (
 	        .sd_img_mounted    ( sdc_img_mounted    ),
 	        .sd_lba     ( sdc_lba     ),
 	        .sd_rd      ( sdc_rd      ),
+	        .sd_wr      ( sdc_wr      ),
 	        .sd_busy    ( sdc_busy    ),
 	        .sd_done    ( sdc_done    ),
-	        .sd_data    ( sdc_data    ),
+	        .sd_data_in ( sdc_data_in ),
+	        .sd_data_out( sdc_data_out),
 	        .sd_data_en ( sdc_data_en ),
 	        .sd_addr    ( sdc_addr    )
 	);

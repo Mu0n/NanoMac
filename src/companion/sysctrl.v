@@ -25,7 +25,8 @@ module sysctrl (
 
   // values that can be configured by the user		
   output  	    system_reset,
-  output reg [1:0]  system_memory
+  output reg [1:0]  system_memory,
+  output reg [1:0]  system_floppy_wprot
 );
 
 reg [3:0] state;
@@ -84,7 +85,8 @@ always @(posedge clk) begin
 
       // OSD value defaults. These should be sane defaults, but the MCU
       // will very likely override these early
-      system_memory <= 2'd0;               // 128k TODO: 1M      
+      system_memory <= 2'd0;               // 128k TODO: 1M
+      system_floppy_wprot <= 2'b11;        // both disks write protected
    end else begin // if (reset)
       //  bring button state into local clock domain
       buttonsD <= buttons;
@@ -170,6 +172,8 @@ always @(posedge clk) begin
 		   
 		   // Value "Y": Memory 128k(0), 512k(1), 1M(2) or 2M(3)
 		   if(id == "Y") system_memory <= data_in[1:0];
+		   // Value "W": Floppy write protect int (0) and ext (1)
+		   if(id == "W") system_floppy_wprot <= data_in[1:0];
                 end
             end
 

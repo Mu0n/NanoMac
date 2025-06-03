@@ -19,7 +19,7 @@ static double simulation_time;
 
 #define ROM "plusrom.bin"
 #define DISK_INT "../disks/system30.dsk"
-#define DISK_EXT "../disks/MacMan 1.0.dsk"
+// #define DISK_EXT "../disks/MacMan 1.0.dsk"
 
 #define TICKLEN   (0.5/16000000)
 
@@ -27,12 +27,15 @@ static double simulation_time;
 
 // times with 128k ram
 // #define TRACESTART 0.0
+// #define TRACESTART 0.7
 // #define TRACESTART 1.9   // kbd model cmd and first IWM access
 // #define TRACESTART 2.2   // checkerboard, kbd  inquiry cmd
 // #define TRACESTART 4.2   // floppy boot start
+// #define TRACESTART 5.1   // Sony write called
+// #define TRACESTART 20.0   // 128k / system 3.0 desktop reached
 
 #ifdef TRACESTART
-#define TRACEEND     (TRACESTART + 0.2)
+#define TRACEEND     (TRACESTART + 0.1)
 #endif
 
 // floppy disk lba to side/track/sector translation table
@@ -63,7 +66,6 @@ Pixel screenbuffer[MAX_H_RES*MAX_V_RES];
 
 /*
   Mac video = 512x342, physical 704x370€60Hz -> 15.664 MHz pixel clock 
-
  */
 
 void init_video(void) {
@@ -270,6 +272,37 @@ void hexdump(void *data, int size) {
   }
 }
 
+void hexdiff(void *data, void *cmp, int size) {
+  int i, b2c;
+  int n=0;
+  char *ptr = (char*)data;
+  char *cptr = (char*)cmp;
+
+  if(!size) return;
+
+  while(size>0) {
+    printf("%04x: ", n);
+
+    b2c = (size>16)?16:size;
+    for(i=0;i<b2c;i++) {
+      if(cptr[i] == ptr[i])      
+	printf("%02x ", 0xff&ptr[i]);
+      else
+      	printf("\033[1;33m%02x\033[0m ", 0xff&ptr[i]);
+    }
+      
+    printf("  ");
+    for(i=0;i<(16-b2c);i++) printf("   ");
+    for(i=0;i<b2c;i++)      printf("%c", isprint(ptr[i])?ptr[i]:'.');
+    printf("\n");
+
+    ptr  += b2c;
+    cptr  += b2c;
+    size -= b2c;
+    n    += b2c;
+  }
+}
+
 static uint64_t GetTickCountMs() {
   struct timespec ts;
   
@@ -335,6 +368,7 @@ void tick(int c) {
       
     // ---------------------------- sd card -------------------------
     static int sdc_delay = 0;
+    static int sdc_write_cnt = 0;
     if(sdc_delay) {
       sdc_delay--;
       tb->sdc_data_en = 0;
@@ -371,6 +405,23 @@ void tick(int c) {
       }
       
       if(sdc_state == 0) {
+	if(tb->sdc_wr & 3) {
+	  if(tb->sdc_wr & 1) drive = 0;
+	  else               drive = 1;
+	  
+	  printf("%.3fms SDC WR drv %d, lba %d = %d/%d/%d\n", simulation_time*1000,
+		 drive, tb->sdc_lba,
+		 fdc_map[sides[drive]][tb->sdc_lba][0],
+		 fdc_map[sides[drive]][tb->sdc_lba][1],
+		 fdc_map[sides[drive]][tb->sdc_lba][2]);
+
+	  tb->sdc_busy = 1;
+	  tb->sdc_addr = 0;
+	  sdc_write_cnt = 512;
+	  sdc_state = 7;
+	  sdc_delay = 10;
+	}
+	  
 	if(!tb->sdc_busy && (tb->sdc_rd & 3)) {
 	  if(tb->sdc_rd & 1) drive = 0;
 	  else               drive = 1;
@@ -395,7 +446,7 @@ void tick(int c) {
 	tb->sdc_busy = 1;
 	sdc_state = 2;	
 	// wait before lowering busy
-	sdc_delay = 1000;	// <---- this is the place to simulate a slow sd card
+	sdc_delay = 1000;	// <---- this is the place to simulate a slow reading sd card
       } else if(sdc_state == 2) {
 	tb->sdc_done = 1;
 	sdc_state = 3;	
@@ -403,7 +454,7 @@ void tick(int c) {
 	sdc_delay = 10;	
       } else if(sdc_state == 3) {
 	tb->sdc_addr = 0;
-	tb->sdc_data = sector_buffer[tb->sdc_addr];
+	tb->sdc_data_in = sector_buffer[tb->sdc_addr];
 	tb->sdc_data_en = 1;
 	sdc_state = 4;	
 	sdc_delay = 3;
@@ -411,7 +462,7 @@ void tick(int c) {
 	// send data
 	if(tb->sdc_addr < 511) {	
 	  tb->sdc_addr++;
-	  tb->sdc_data = sector_buffer[tb->sdc_addr];
+	  tb->sdc_data_in = sector_buffer[tb->sdc_addr];
 	  tb->sdc_data_en = 1;
 	  sdc_delay = 3;
 	} else {
@@ -427,6 +478,43 @@ void tick(int c) {
       } else if(sdc_state == 6) {
 	sdc_state = 0;
 	sdc_delay = 20;
+      } else if(sdc_state == 7) {
+	static unsigned char rx_buffer[512];
+	
+	// receive 512 bytes sector data from core	
+	if(sdc_write_cnt) {	  
+	  // printf("WR %d, %08x = %02x\n", 512-sdc_write_cnt,  tb->sdc_addr, tb->sdc_data_out);
+	  rx_buffer[tb->sdc_addr++] = tb->sdc_data_out;
+
+	  sdc_write_cnt -= 1;	
+	  sdc_delay = 10;
+
+	  if(sdc_write_cnt == 0) {
+	    unsigned char refsec[512];
+	    
+	    // load sector for comparison to display the changes
+	    fseek(sdc_fd[drive], 512*tb->sdc_lba, SEEK_SET);
+	    if(fread(refsec, 1, 512, sdc_fd[drive]) != 512) {
+	      printf("SDC READ ERROR\n");
+	      exit(-1);
+	    }
+	      
+	    hexdiff(rx_buffer, refsec, 512);
+
+	    // We might write the sector back to the image. But since
+	    // we don't really interactively change disk contents we
+	    // don't do this.
+	    
+	    printf("WR done\n");
+	    sdc_delay = 100;
+	    tb->sdc_done = 1;
+	    sdc_state = 8;
+	  }
+	}      
+      } else if(sdc_state == 8) {
+	printf("WR not busy\n");
+	tb->sdc_busy = 0;
+	sdc_state = 0;
       }
     }
       
@@ -457,7 +545,7 @@ void tick(int c) {
 #endif
 	} else {
 #ifdef DEBUG_MEM
-	  printf("%.3fms SDRAM WRITE %06x -> %08x = %04x/%x\n", simulation_time*1000, tb->sd_addr, addr<<2, tb->sd_data_out, tb->sd_dqm);	  
+	  printf("%.3fms SDRAM WRITE %06x -> %08x = %04x/%x\n", simulation_time*1000, tb->sd_addr, addr<<2, tb->sd_data_out, tb->sd_dqm);
 #endif
 	  // which bytes are being being written depends on the dqm bits
 	  if(!(tb->sd_dqm & 1)) sdram[addr] = (sdram[addr] & 0xffffff00)|(tb->sd_data_out & 0x000000ff);
@@ -471,9 +559,13 @@ void tick(int c) {
     if(tb->phase == 6) {
       // --------------------- ROM --------------------    
       // check for start of rom access
-      //if(!tb->_romOE)
-      // ALWAYS read rom- That way we don't have to wait for /AS
-      tb->romData = SWAP16(rom[tb->romAddr]);
+      if(!tb->_romOE)
+	// ALWAYS read rom- That way we don't have to wait for /AS
+	tb->romData = SWAP16(rom[tb->romAddr]);
+
+      // skip rom test
+      if((simulation_time>1000000) && !tb->_romOE && ((tb->romAddr<<1)==0x18f44))
+	printf("%.3fms Sony Write trigger <------------------------- \n", simulation_time*1000);
     }
       
     // only run sram cycle if ram was already selected in phase 2

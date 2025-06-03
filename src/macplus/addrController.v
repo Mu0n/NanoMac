@@ -144,7 +144,7 @@ module addrController (
 		.vsync(vsync), 
 		._hblank(_hblank),
 		._vblank(_vblank), 
-		.refresh(resfresh), 
+		.refresh(refresh), 
 		.loadPixels(loadPixels));
 		
 endmodule

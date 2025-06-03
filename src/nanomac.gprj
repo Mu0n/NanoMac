@@ -37,7 +37,7 @@
         <File path="macplus/scc.v" type="file.verilog" enable="1"/>
         <File path="macplus/videoShifter.v" type="file.verilog" enable="1"/>
         <File path="macplus/adb.sv" type="file.verilog" enable="1"/>
-        <File path="macplus/floppy_track_encoder.v" type="file.verilog" enable="1"/>
+        <File path="macplus/floppy_track_codec.v" type="file.verilog" enable="1"/>
         <File path="macplus/floppy_track_buffer.v" type="file.verilog" enable="1"/>
         <File path="macplus/scsi.v" type="file.verilog" enable="1"/>
         <File path="macplus/via6522.v" type="file.verilog" enable="1"/>

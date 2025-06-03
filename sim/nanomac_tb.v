@@ -28,9 +28,11 @@ module nanomac_tb
    input [1:0]	    image_mounted,
    output [10:0]    sdc_lba,
    output [1:0]	    sdc_rd,
+   output [1:0]	    sdc_wr,
    input	    sdc_done,
    input	    sdc_busy,
-   input [7:0]	    sdc_data,
+   input [7:0]	    sdc_data_in,
+   output [7:0]	    sdc_data_out,
    input	    sdc_data_en,
    input [8:0]	    sdc_addr,
 
@@ -103,6 +105,7 @@ macplus macplus (
 	.configROMSize(1'b1),       // 64k or 128K ROM
 	.configRAMSize(2'd0),       // 128k, 512k, 1MB or 4MB
 	.configMachineType(1'b0),   // Plus, SE
+	.configFloppyWProt(2'b00),  // no write protection
 
         .leds(),
 
@@ -126,9 +129,11 @@ macplus macplus (
 	.sdc_image_mounted( image_mounted ),
 	.sdc_lba     ( sdc_lba     ),
 	.sdc_rd      ( sdc_rd      ),
+	.sdc_wr      ( sdc_wr      ),
 	.sdc_busy    ( sdc_busy    ),
 	.sdc_done    ( sdc_done    ),
-	.sdc_data    ( sdc_data    ),
+	.sdc_data_in ( sdc_data_in ),
+ 	.sdc_data_out( sdc_data_out),
 	.sdc_data_en ( sdc_data_en ),
 	.sdc_addr    ( sdc_addr    ),
 	 

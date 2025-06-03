@@ -71,24 +71,34 @@ module floppy
 	input	      SEL, // HDSEL from VIA
 	input	      lstrb, // aka PH3
 	input	      _enable, 
-	input [7:0]   writeData, 
 	output [7:0]  readData,
-	
+
+        // interface to receive write data from IWM and return decoded
+        // sector data to be written into track buffer
+	input [7:0]   writeData, 
+	input	      writeDataStrobe, 
+	output [7:0]  writeDataDecoded,
+	output [8:0]  writeAddr,
+	output [3:0]  writeSector,
+	output	      writeStrobe,
+
 	input	      advanceDriveHead, // prevents overrun when debugging, does not exist on a real Mac!
 	output reg    newByteReady,
 	input	      insertDisk,
 	input	      diskSides,
 	output	      diskEject,
+	input	      diskWProt,
 
 	output	      motor,
 	output	      act,
 
         // Interface to track buffer.
-	output	      trackSide,
-	output [6:0]  trackIndex,
+	output	      trackSide, // side requested by floppy
+	output [6:0]  trackIndex, // index of track requested by floppy
+ 
 	output [13:0] trackAddr,
 	input [7:0]   trackData,
-	input [3:0]   trackSpt,          // sectors on current track
+	input [3:0]   trackSpt, // sectors on current track
 	input	      trackReady
 );
 
@@ -115,7 +125,7 @@ assign trackSide = driveSide;
 		1'b0, // disk switched?
 		~(driveTrack == 7'h00), // TK0: track 0 indicator
 		driveRegs[`DRIVE_REG_MOTORON], // motor on
-		1'b0, // WRTPRT = locked
+		~diskWProt, // WRTPRT = 0=locked, 1=unlocked
 		1'b1, // STEP = complete
 		driveRegs[`DRIVE_REG_CSTIN], // disk in drive
 		driveRegs[`DRIVE_REG_DIRTN] // step direction
@@ -127,22 +137,32 @@ assign trackSide = driveSide;
 	always @(posedge clk) old_newByteReady <= newByteReady;
 	
 	// include track encoder
-	floppy_track_encoder enc
+	floppy_track_codec codec
 	(
-		.clk		( clk ),
-		.ready	( ~old_newByteReady & newByteReady & trackReady ),
+		.clk		 ( clk ),
+		.en		 ( cen ),
+		.ready	         ( ~old_newByteReady & newByteReady & trackReady ),
 
-		.rst     ( !_reset ),
+		.rst             ( !_reset ),
 		
-		.side    ( driveSide ),
-		.sides   ( diskSides ),
-		.track   ( driveTrack ),
+		.side            ( driveSide ),
+		.sides           ( diskSides ),
+		.track           ( driveTrack ),
 
-	        .addr    ( trackAddr ),
-		.data    ( trackData ),
-		.spt     ( trackSpt  ),
+	        // read interface to read data from buffer to encode on the fly
+	        .addr            ( trackAddr ),
+		.data            ( trackData ),
+		.spt             ( trackSpt  ),
+		.odata           ( dskReadDataEnc ),
 	 
-		.odata   ( dskReadDataEnc )
+                // write direction (decoding data encoded by mac)
+	        .writeData       ( writeData       ),
+	        .writeDataStrobe ( writeDataStrobe ),
+
+	        .writeDataDecoded( writeDataDecoded ),
+	        .writeAddr       ( writeAddr        ),
+                .writeSector     ( writeSector      ),
+                .writeStrobe     ( writeStrobe      )
 	);
 	
 	wire [3:0] driveReadAddr = {ca2,ca1,ca0,SEL};
@@ -160,38 +180,38 @@ assign trackSide = driveSide;
 			diskDataByteTimer <= 0;
 			readyToAdvanceHead <= 1;
 			newByteReady <= 1'b0;
-		end 
+		end
 		else begin			
 			if(cep) begin
-			// at time 0, latch a new byte and advance the drive head
-			if (diskDataByteTimer == 0 && readyToAdvanceHead && diskImageData != 0) begin
-				diskDataIn <= diskImageData;
-				newByteReady <= 1;
-				diskDataByteTimer <= 1;  // make timer run again
-
-				// clear diskImageData after it's used, so we can tell when we get a new one from the disk	
-				diskImageData <= 0;
-
-				// for debugging, don't advance the head until the IWM says it's ready
-				readyToAdvanceHead <= 1'b1; // TEMP: treat IWM as always ready
-			end
-
-			// The iwm data rates is 8MHZ/128 = 16us
-			else begin
-				// a timer governs when the next disk byte will become available
-				diskDataByteTimer <= diskDataByteTimer + 1'b1;
-
-				newByteReady <= 1'b0;
-
-			        // latch bew byte shortly after it has been requested
-				if (diskDataByteTimer == 1) begin
-					// whenever ACK is received, store the data from the current diskImageAddr 
-					diskImageData <= dskReadDataEnc;
-				end
-
-				if (advanceDriveHead) begin
-					readyToAdvanceHead <= 1'b1;
-				end
+			   // at time 0, latch a new byte and advance the drive head
+			   if (diskDataByteTimer == 0 && readyToAdvanceHead && diskImageData != 0) begin
+			      diskDataIn <= diskImageData;
+			      newByteReady <= 1;
+			      diskDataByteTimer <= 1;  // make timer run again
+			      
+			      // clear diskImageData after it's used, so we can tell when we get a new one from the disk	
+			      diskImageData <= 0;
+			      
+			      // for debugging, don't advance the head until the IWM says it's ready
+			      readyToAdvanceHead <= 1'b1; // TEMP: treat IWM as always ready
+			   end
+			   
+			   // The iwm data rates is 8MHZ/128 = 16us
+			   else begin
+			      // a timer governs when the next disk byte will become available
+			      diskDataByteTimer <= diskDataByteTimer + 1'b1;
+			      
+			      newByteReady <= 1'b0;
+			      
+			      // latch bew byte shortly after it has been requested
+			      if (diskDataByteTimer == 1) begin
+				 // whenever ACK is received, store the data from the current diskImageAddr 
+				 diskImageData <= dskReadDataEnc;
+			      end
+			      
+			      if (advanceDriveHead) begin
+				 readyToAdvanceHead <= 1'b1;
+			      end
 			end
 
 			// switch drive sides if DRIVE_REG_RDDATA0 or DRIVE_REG_RDDATA1 are read
@@ -221,14 +241,13 @@ assign trackSide = driveSide;
 	   end	   
 	end
 
-
 	assign readData = _enable ? 8'hFF :
 	                  (driveReadAddr == `DRIVE_REG_RDDATA0 || driveReadAddr == `DRIVE_REG_RDDATA1) ? diskDataIn :
-							{ driveRegsAsRead[driveReadAddr], 7'h00 };
-		
+			  { driveRegsAsRead[driveReadAddr], 7'h00 };
+
 	// write drive registers
 	wire [2:0] driveWriteAddr = {ca1,ca0,SEL};
-	
+   
 	// DRIVE_REG_DIRTN		0  /* R/W: step direction (0=toward track 79, 1=toward track 0) */
 	always @(posedge clk or negedge _reset) begin
 		if (_reset == 1'b0) begin		
@@ -269,7 +288,7 @@ assign trackSide = driveSide;
 	end									
 									
 	//`define DRIVE_REG_STEP		2  /* R: drive head stepping (1 = complete) */
-												/* W: 0 = step drive head */
+ 						   /* W: 0 = step drive head */
 	always @(posedge clk or negedge _reset) begin
 		if (_reset == 1'b0) begin	
 			driveTrack <= 0;
@@ -305,11 +324,11 @@ assign trackSide = driveSide;
 		
 		Experimentally determined toggle rates for Plus Too with 8.125 MHz CPU clock:
 		TACH Half Period Clocks		Resulting Timing Value
-					9996					$117B (4475)
-					9122  				$1328 (4904)
-					8292  				$1513 (5395)
-					7463  				$176A (5994)
-					6634					$1A56 (6742)
+			9996			$117B (4475)
+			9122  			$1328 (4904)
+			8292  			$1513 (5395)
+			7463  			$176A (5994)
+			6634			$1A56 (6742)
 	*/
 	
 	reg [13:0] driveTachTimer; 

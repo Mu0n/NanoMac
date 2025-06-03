@@ -13,7 +13,7 @@ add_file macplus/rtc.v
 add_file macplus/scc.v
 add_file macplus/videoShifter.v
 add_file macplus/adb.sv
-add_file macplus/floppy_track_encoder.v
+add_file macplus/floppy_track_codec.v
 add_file macplus/floppy_track_buffer.v
 add_file macplus/scsi.v
 #add_file macplus/uart/rxuart.v

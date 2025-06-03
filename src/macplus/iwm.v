@@ -48,6 +48,7 @@ module iwm
 	input [3:0]   cpuAddrRegHi,
 	input	      SEL, // from VIA
 	input	      driveSel, // internal drive select, 0 - upper, 1 - lower
+	input [1:0]   diskWProt, // write protection
 	output [15:0] dataOut,
 
 	output [1:0]  diskLED,
@@ -57,9 +58,11 @@ module iwm
 	input [1:0]   sd_img_mounted,
 	output [10:0] sd_lba,
 	output [1:0]  sd_rd,
+	output [1:0]  sd_wr,
 	input	      sd_done,
 	input	      sd_busy,
-	input [7:0]   sd_data,
+	input [7:0]   sd_data_in,
+	output [7:0]  sd_data_out,
 	input	      sd_data_en,
 	input [8:0]   sd_addr
 );
@@ -70,7 +73,10 @@ wire [1:0]	      diskSides;
 wire [1:0]	      insertDisk;   
 wire [1:0]	      diskAct;   
 wire [1:0]	      diskMotor;
-assign diskLED = insertDisk & diskAct & diskMotor;  
+
+wire [1:0]	      driveMask = selectExternalDrive?2'b10:2'b01;
+      
+assign diskLED = driveMask & insertDisk & diskAct & diskMotor;  
 
 reg selectExternalDrive;
    
@@ -89,6 +95,21 @@ wire [13:0] addrInt;
 wire [13:0] addrExt;
 wire [13:0] addr = selectExternalDrive?addrExt:addrInt;
 
+// data written by IWM
+reg [7:0] writeData;
+reg	  writeDataStrobe;   
+
+// write data converted to decoded sector data
+wire [7:0] writeDataDecodedInt, writeDataDecodedExt;   
+wire [8:0] writeAddrInt, writeAddrExt;   
+wire [3:0] writeSectorInt, writeSectorExt;   
+wire	   writeStrobeInt, writeStrobeExt;   
+
+wire [7:0] writeDataDecoded = selectExternalDrive?writeDataDecodedExt:writeDataDecodedInt;   
+wire [8:0] writeAddr = selectExternalDrive?writeAddrExt:writeAddrInt;   
+wire [3:0] writeSector = selectExternalDrive?writeSectorExt:writeSectorInt;   
+wire	   writeStrobe = selectExternalDrive?writeStrobeExt:writeStrobeInt;   
+
 // we only need a single track buffer since we also only have
 // one iwm which in turn can only access one floppy drive at a time
 floppy_track_buffer fb 
@@ -103,19 +124,29 @@ floppy_track_buffer fb
      .side(selectExternalDrive?sideExt:sideInt),
      .track(selectExternalDrive?trackExt:trackInt),
      
+     // read direction (encoding data for mac)
      .addr(addr), 
      .data(data),
      .spt(spt),
      .ready(ready),
+
+     // write direction (decoding data encoded by mac)
+     .writeDataDecoded(writeDataDecoded),
+     .writeAddr(writeAddr),
+     .writeSector(writeSector),
+     .writeStrobe(writeStrobe),
      
      // interface to sd card
      .sd_img_size(sd_img_size),
      .sd_img_mounted(sd_img_mounted),
+     
      .sd_lba     ( sd_lba     ),
      .sd_rd      ( sd_rd      ),
+     .sd_wr      ( sd_wr      ),
      .sd_busy    ( sd_busy    ),
      .sd_done    ( sd_done    ),
-     .sd_data    ( sd_data    ),
+     .sd_data_in ( sd_data_in ),
+     .sd_data_out( sd_data_out),
      .sd_data_en ( sd_data_en ),
      .sd_addr    ( sd_addr    )
      );
@@ -129,11 +160,8 @@ floppy_track_buffer fb
 	reg ca0, ca1, ca2, lstrb, q6, q7;
 	reg ca0Next, ca1Next, ca2Next, lstrbNext, selectExternalDriveNext, q6Next, q7Next;
 	wire advanceDriveHead; // prevents overrun when debugging, does not exit on a real Mac!
-	reg [7:0] writeData;
 	reg [7:0] readDataLatch;
 	wire _iwmBusy, _writeUnderrun;
-	assign _iwmBusy = 1'b1; // for writes, a value of 1 here indicates the IWM write buffer is empty
-	assign _writeUnderrun = 1'b1;
 
 	// floppy disk drives 
 	reg diskEnableExt, diskEnableInt;
@@ -158,16 +186,24 @@ floppy_track_buffer fb
 		.SEL(SEL),
 		.lstrb(lstrb),
 		._enable(~(diskEnableInt & driveSel)),
+
 		.writeData(writeData),
+		.writeDataStrobe(!selectExternalDrive & writeDataStrobe),
+	        .writeDataDecoded( writeDataDecodedInt ),
+	        .writeAddr       ( writeAddrInt        ),
+                .writeSector     ( writeSectorInt      ),
+                .writeStrobe     ( writeStrobeInt      ),
+
 		.readData(readDataInt),
 		.advanceDriveHead(advanceDriveHead),
 		.newByteReady(newByteReadyInt),
 		.insertDisk(insertDisk[0]),
 		.diskSides(diskSides[0]),
 		.diskEject(diskEject[0]),
+		.diskWProt(diskWProt[0]),
 	
-		.motor(diskMotor[0]),
-		.act(diskAct[0]),
+		.motor        ( diskMotor[0] ),
+		.act          ( diskAct[0] ),
 
 	        .trackSide    ( sideInt  ),
 	        .trackIndex   ( trackInt ),
@@ -190,16 +226,24 @@ floppy_track_buffer fb
 		.SEL(SEL),
 		.lstrb(lstrb),
 		._enable(~diskEnableExt),
+
 		.writeData(writeData),
+		.writeDataStrobe(selectExternalDrive & writeDataStrobe),
+	        .writeDataDecoded( writeDataDecodedExt ),
+	        .writeAddr       ( writeAddrExt        ),
+                .writeSector     ( writeSectorExt      ),
+                .writeStrobe     ( writeStrobeExt      ),
+
 		.readData(readDataExt),
 		.advanceDriveHead(advanceDriveHead),
 		.newByteReady(newByteReadyExt),
 		.insertDisk(insertDisk[1]),
 		.diskSides(diskSides[1]),
 		.diskEject(diskEject[1]),
+		.diskWProt(diskWProt[1]),
 		
-		.motor(diskMotor[1]),
-		.act(diskAct[1]),
+		.motor        ( diskMotor[1] ),
+		.act          ( diskAct[1] ),
 
 	        .trackSide    ( sideExt  ),
 	        .trackIndex   ( trackExt ),
@@ -211,7 +255,15 @@ floppy_track_buffer fb
 
 	wire [7:0] readData = selectExternalDrive ? readDataExt : readDataInt;
 	wire newByteReady = selectExternalDrive ? newByteReadyExt : newByteReadyInt;
-	
+
+        // generate a write ready signal	
+        reg writeBusy;
+
+        // TODO: Implement underrun
+        assign _iwmBusy = !writeBusy; // for writes, a value of 1 here indicates the IWM write buffer is empty
+	assign _writeUnderrun = 1'b1;
+
+
 	reg [4:0] iwmMode;
 	/* IWM mode register: S C M H L
  	 S	Clock speed:
@@ -316,55 +368,60 @@ floppy_track_buffer fb
 		endcase
 	end
 
-	// write IWM state
-	always @(posedge clk or negedge _reset) begin
-		if (_reset == 1'b0) begin		
-			iwmMode <= 0;
-			writeData <= 0;
-		end
-		else if(cen) begin
-			if (_cpuRW == 0 && selectIWM == 1'b1 && _cpuLDS == 1'b0) begin
-				// writing to any IWM address modifies state as selected by Q7 and Q6
-				case ({q7Next,q6Next})
-					2'b11: begin
-						if (diskEnableExt | diskEnableInt)
-							writeData <= dataInLo;
-						else
-							iwmMode <= dataInLo[4:0];
-					end
-				endcase
-			end
-		end
-	end
+always @(posedge clk or negedge _reset) begin
+   reg regWrite;   // TODO-> dataRegWrite
 
-	// Manage incoming bytes from the disk drive
-	wire iwmRead = (_cpuRW == 1'b1 && selectIWM == 1'b1 && _cpuLDS == 1'b0);
-	reg [3:0] readLatchClearTimer; 
-	always @(posedge clk or negedge _reset) begin
-		if (_reset == 1'b0) begin	
-			readDataLatch <= 0;
-			readLatchClearTimer <= 0;
-		end 
-		else if(cen) begin
-			// a countdown timer governs how long after a data latch read before the latch is cleared
-			if (readLatchClearTimer != 0) begin
-				readLatchClearTimer <= readLatchClearTimer - 1'b1;
-			end
+   if (_reset == 1'b0) begin		
+      iwmMode <= 0;
+      regWrite <= 1'b0;      
+      writeBusy <= 1'b0;
+      writeDataStrobe <= 1'b0;
+   end else if(cen) begin
+      regWrite <= _cpuRW == 0 && selectIWM == 1'b1 && _cpuLDS == 1'b0;      
+      writeDataStrobe <= 1'b0;
+      if(newByteReady) writeBusy <= 1'b0;
+      
+      if (!regWrite && _cpuRW == 0 && selectIWM == 1'b1 &&  _cpuLDS == 1'b0) begin
+	 // writing to any IWM address modifies state as selected by Q7 and Q6
+	 case ({q7Next,q6Next})
+	   2'b11: begin // IWM mode register when not enabled (write-only), or (write?) data register when enabled
+	      if (diskEnableExt | diskEnableInt) begin
+		 writeData <= dataInLo;
+		 writeDataStrobe <= 1'b1;		 
+		 writeBusy <= 1'b1;      
+	      end else begin
+		 iwmMode <= dataInLo[4:0];
+	      end
+	   end
+	 endcase
+      end
+   end
+end
+   
+// Manage incoming bytes from the disk drive
+wire iwmRead = (_cpuRW == 1'b1 && selectIWM == 1'b1 && _cpuLDS == 1'b0);
+reg [3:0] readLatchClearTimer; 
+always @(posedge clk or negedge _reset) begin
+   if (_reset == 1'b0) begin	
+      readDataLatch <= 0;
+      readLatchClearTimer <= 0;
+   end else if(cen) begin
+      // a countdown timer governs how long after a data latch read before the latch is cleared
+      if (readLatchClearTimer != 0)
+	 readLatchClearTimer <= readLatchClearTimer - 1'b1;
+      
+      // the conclusion of a valid CPU read from the IWM will start the timer to clear the latch
+      if (iwmRead && readDataLatch[7])
+	 readLatchClearTimer <= 4'hD; // clear latch 14 clocks after the conclusion of a valid read
+      
+      // when the drive indicates that a new byte is ready, latch it
+      // NOTE: the real IWM must self-synchronize with the incoming data to determine when to latch it
+      if (newByteReady)
+	 readDataLatch <= readData;
+      else if (readLatchClearTimer == 1'b1)
+	readDataLatch <= 0;
+   end
+end
 
-			// the conclusion of a valid CPU read from the IWM will start the timer to clear the latch
-			if (iwmRead && readDataLatch[7]) begin
-				readLatchClearTimer <= 4'hD; // clear latch 14 clocks after the conclusion of a valid read
-			end
-
-			// when the drive indicates that a new byte is ready, latch it
-			// NOTE: the real IWM must self-synchronize with the incoming data to determine when to latch it
-			if (newByteReady) begin
-				readDataLatch <= readData;
-			end
-			else if (readLatchClearTimer == 1'b1) begin
-				readDataLatch <= 0;
-			end
-		end
-	end
-	assign advanceDriveHead = readLatchClearTimer == 1'b1; // prevents overrun when debugging, does not exist on a real Mac!
+assign advanceDriveHead = readLatchClearTimer == 1'b1; // prevents overrun when debugging, does not exist on a real Mac!
 endmodule

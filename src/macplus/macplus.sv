@@ -55,15 +55,18 @@ module macplus
 	input	      configROMSize, // 64k or 128K ROM
 	input [1:0]   configRAMSize, // 128k, 512k, 1MB or 4MB
 	input	      configMachineType, // 0 = Plus, 1 = SE
+	input [1:0]   configFloppyWProt,
 			  
         // interface to sd card
 	input [31:0]  sdc_image_size,
 	input [1:0]   sdc_image_mounted,
 	output [10:0] sdc_lba,
 	output [1:0]  sdc_rd,
+	output [1:0]  sdc_wr,
 	input	      sdc_done,
 	input	      sdc_busy,
-	input [7:0]   sdc_data,
+	output [7:0]  sdc_data_out,
+	input [7:0]   sdc_data_in,
 	input	      sdc_data_en,
 	input [8:0]   sdc_addr,
 
@@ -321,6 +324,7 @@ dataController #(SCSI_DEVS) dc0
 	.E_rising(E_rising),
 	.E_falling(E_falling),
 	.machineType(configMachineType),
+	.floppy_wprot(configFloppyWProt),
 	._systemReset(n_reset),
 	._cpuReset(_cpuReset), 
 	._cpuIPL(_cpuIPL),
@@ -349,13 +353,15 @@ dataController #(SCSI_DEVS) dc0
         // interface to sd card
 	.sdc_img_mounted( sdc_image_mounted ),
 	.sdc_img_size( sdc_image_size ),
-        .sdc_lba     ( sdc_lba     ),
-	.sdc_rd      ( sdc_rd      ),
-	.sdc_busy    ( sdc_busy    ),
-	.sdc_done    ( sdc_done    ),
-	.sdc_data    ( sdc_data    ),
-	.sdc_data_en ( sdc_data_en ),
-	.sdc_addr    ( sdc_addr    ),
+        .sdc_lba     ( sdc_lba      ),
+	.sdc_rd      ( sdc_rd       ),
+	.sdc_wr      ( sdc_wr       ),
+	.sdc_busy    ( sdc_busy     ),
+	.sdc_done    ( sdc_done     ),
+	.sdc_data_in ( sdc_data_in  ),
+        .sdc_data_out( sdc_data_out ),
+	.sdc_data_en ( sdc_data_en  ),
+	.sdc_addr    ( sdc_addr     ),
 	 
 	// peripherals
 	.mouse(MOUSE),
