@@ -505,7 +505,8 @@ module dataController (
 		.strobe_in(kbd_in_strobe)
         );
         
-   
+        // TODO: ADB is only used in the SE which is currently not enabled/fully implemented
+        // in NanoMac.    
 	reg  [7:0] adb_din;
 	reg        adb_din_strobe;
 	wire [7:0] adb_dout;
@@ -524,8 +525,8 @@ module dataController (
 		.adb_dout(adb_dout),
 		.adb_dout_strobe(adb_dout_strobe),
 
-		.ps2_mouse(ps2_mouse),
-		.ps2_key(ps2_key)
+		.ps2_mouse(25'h00000),
+		.ps2_key(12'h000)
 	);
 
 endmodule

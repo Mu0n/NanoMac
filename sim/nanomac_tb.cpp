@@ -415,11 +415,10 @@ void tick(int c) {
 		 fdc_map[sides[drive]][tb->sdc_lba][1],
 		 fdc_map[sides[drive]][tb->sdc_lba][2]);
 
-	  tb->sdc_busy = 1;
 	  tb->sdc_addr = 0;
 	  sdc_write_cnt = 512;
+	  sdc_delay = 100;
 	  sdc_state = 7;
-	  sdc_delay = 10;
 	}
 	  
 	if(!tb->sdc_busy && (tb->sdc_rd & 3)) {
@@ -479,6 +478,10 @@ void tick(int c) {
 	sdc_state = 0;
 	sdc_delay = 20;
       } else if(sdc_state == 7) {
+	tb->sdc_busy = 1;
+	sdc_delay = 20;
+	sdc_state = 8;
+      } else if(sdc_state == 8) {
 	static unsigned char rx_buffer[512];
 	
 	// receive 512 bytes sector data from core	
@@ -508,10 +511,10 @@ void tick(int c) {
 	    printf("WR done\n");
 	    sdc_delay = 100;
 	    tb->sdc_done = 1;
-	    sdc_state = 8;
+	    sdc_state = 9;
 	  }
 	}      
-      } else if(sdc_state == 8) {
+      } else if(sdc_state == 9) {
 	printf("WR not busy\n");
 	tb->sdc_busy = 0;
 	sdc_state = 0;

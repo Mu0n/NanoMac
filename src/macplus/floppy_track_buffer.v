@@ -68,18 +68,22 @@ end
    
 // ---------------- calculate side/track into offset into floppy image ---------------
 
-// number of sectors on current track
-assign spt =
-     (track[6:4] == 3'd0)?4'd12: // track  0 - 15
-     (track[6:4] == 3'd1)?4'd11: // track 16 - 31
-     (track[6:4] == 3'd2)?4'd10: // track 32 - 47
-     (track[6:4] == 3'd3)?4'd9:  // track 48 - 63
-     4'd8;                       // track 64 - ...
-
 // The track to be used for Sd card IO depends on read or write. On read
 // it's the newly requested track, on write it's the one in the buffer.
 wire [6:0] iotrack;
    
+// number of sectors on current track. This is exported to the floppy to generate the
+// correct pattern of the "spinning" floppy. So this should actually always be the spt
+// of the track in buffer. Actually all the parameters (side, track, ...) are only
+// used when the track_buffer signals "ready" and this in turn only happens if the
+// track in buffer matches the requested one.
+assign spt =
+     (iotrack[6:4] == 3'd0)?4'd12: // track  0 - 15
+     (iotrack[6:4] == 3'd1)?4'd11: // track 16 - 31
+     (iotrack[6:4] == 3'd2)?4'd10: // track 32 - 47
+     (iotrack[6:4] == 3'd3)?4'd9:  // track 48 - 63
+     4'd8;                         // track 64 - ...
+
 // all possible tack*sector factors
 wire [9:0] track_times_12 =      // x*12 = x*8 + x*4
     { iotrack, 3'b000 } +        // x<<3 +
@@ -122,9 +126,16 @@ reg [7:0]  track_loader_state;
 reg [8:0]  track_in_progress;
 reg [3:0]  track_spt;   
 
-// iowriting indicates that the track in buffer is valid and IWM writes would go to that buffer
-wire iowriting = (track_loader_state == 0) && ready;  
-assign iotrack = iowriting?track_in_buffer[6:0]:track; // current track
+wire [6:0] track_in_buffer_track = track_in_buffer[6:0];   // track no of track in buffer
+wire       track_in_buffer_side  = track_in_buffer[7];     // side -"-
+wire	   track_in_buffer_drive = track_in_buffer[8];     // drive -"-
+   
+// iowriting indicates that the track in buffer is not the one requested/needed
+// and sectors need to be flushed. In that case track information used as the basis
+// for sd card IO is taken from the track in buffer and not the one being requested
+wire iowriting = ((track_loader_state == 0) && !ready && track_buffer_dirty) || 
+     (track_loader_state == 5) || (track_loader_state == 6);
+assign iotrack = iowriting?track_in_buffer_track:track;
    
 // determine which sector to write next
 wire [3:0] track_sector_to_write =
@@ -141,16 +152,21 @@ wire [3:0] track_sector_to_write =
 	   track_buffer_dirty[10]?4'd10:
 	   track_buffer_dirty[11]?4'd11:
 	   4'd15;   
-   
+
+// One single track of up to 12 sectors is kept in local memory. The
+// unique track is identified by drive (0/1), side (0/1) and track index (0..79)
 wire [8:0] track_requested = {drive, side, track};
+
+// The track buffer signals "ready" whenever the track requested by the mac/iwm/floppy
+// is actually the one that's currently stored in the buffer. Only then can the iwm
+// read or write from and to the buffer
 assign ready = (track_in_buffer == track_requested);  
    
-// read from internal track buffer
+// Read from track buffer. While ready return the data from the buffer to the iwm.
+// Otherwise return data as requested by the sd card as a write may be in progress.
 always @(posedge clk) begin
-  if((track_loader_state == 4'd0) && ready)
-    data <= track_buffer[addr];
-  else
-    sd_data_out <= track_buffer[{track_sector_to_write, sd_addr}];
+  if(ready)  data <= track_buffer[addr];
+  else       sd_data_out <= track_buffer[{track_sector_to_write, sd_addr}];
 end
       
 // state machine to make sure the correct track is in buffer
@@ -169,19 +185,22 @@ always @(posedge clk) begin
       case(track_loader_state)
 	// idle state
 	0: if(!ready && !sd_busy && inserted[drive]) begin
-
-	   // flush dirty sectors before starting to read new
+	   // the wrong track is in buffer, there's a disk in the requested drive
+	   // and the sd card is not busy -> load the right track, but flush any
+	   // dirty sectors before
+	   
+	   // flush any dirty sectors before starting to read new
 	   if(track_buffer_dirty) begin
-	      // Take drive/side/track info from buffer as this is exactly
-	      // what has changed to trigger the flush of the dirty buffer
-	      
 	      // twice the sector offset for double sided disk, soff is derived from
 	      // track_in_buffer during write as well
-	      sd_lba <= (sides[track_in_buffer[8]]?{soff,1'b0}:{1'b0,soff}) + 
- 			(track_in_buffer[7]? { 6'd0, spt  }:11'd0) + // offset to other side
-			{ 7'd0, track_sector_to_write };	     // write first dirty sector     
+
+	      // soff and spt are currently derived from track_in_buffer/iotrack as
+	      // the requested track/side/drive is _not_ the one to flush to
+	      sd_lba <= (sides[track_in_buffer_drive]?{soff,1'b0}:{1'b0,soff}) + 
+ 			(track_in_buffer_side? { 7'd0, spt  }:11'd0) + // offset to other side
+			{ 7'd0, track_sector_to_write };	       // write first dirty sector     
 			
-	      sd_wr <= track_in_buffer[8]?2'b10:2'b01;
+	      sd_wr <= track_in_buffer_drive?2'b10:2'b01;
 	      track_loader_state <= 8'd5;
 
 	   end else begin	   
@@ -194,13 +213,13 @@ always @(posedge clk) begin
 	      // request first sector from sd card
 	      track_loader_sector <= 4'd0;      
 	      sd_lba <= (sides[drive]?{soff,1'b0}:{1'b0,soff}) + // twice the sector offset for double sided disk
- 			(side? { 6'd0, spt  }:11'd0);            // offset to other side
+ 			(side? { 7'd0, spt  }:11'd0);            // offset to other side
 	      sd_rd <= drive?2'b10:2'b01;
 
 	      track_buffer_dirty <= 12'h000;      
 	      track_loader_state <= 8'd1;
 	   end
-	end else if(ready && inserted[drive]) begin
+	end else if(ready) begin
 	   // The track is valid and doesn't have to be reloaded. 
 	   // Check if bytes are to be written by IWM
 
