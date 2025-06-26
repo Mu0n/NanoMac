@@ -21,17 +21,16 @@ module floppy_track_codec (
    input [7:0]	    data,
    input [3:0]	    spt, 
    output [7:0]	    odata,
+
+   output reg    error,
 			     
    input [7:0]	    writeData,
    input	    writeDataStrobe,
    output reg [7:0] writeDataDecoded,
-   output [8:0]	    writeAddr,
+   output reg [8:0] writeAddr,
    output reg [3:0] writeSector,
    output reg	    writeStrobe
 );
-
-reg [8:0]	    writeCount;   
-assign writeAddr = writeCount;
 
 // states of encoder state machine
 reg [3:0] state; 
@@ -365,29 +364,33 @@ localparam WRITE_STATE_CSUM   = 4'd3;
 localparam WRITE_STATE_TRAIL  = 4'd4;
 localparam WRITE_STATE_FAIL   = 4'd5;
 localparam WRITE_STATE_OK     = 4'd6;   
-   
+
 // parse incoming bytes written MacOS into IWM
 always @(posedge clk) begin
    reg [7:0] c2w, c1w, c0w;
    
    if (rst) begin		
-      writeCount <= 9'd0;
+      writeAddr <= 9'd0;
       writePhase <= 2'd0;
       writeState <= WRITE_STATE_IDLE;
       writeStrobe <= 1'b0;
-
+      error <= 1'b0;
    end else if(en) begin
+      reg writeDataStrobeD;
       reg [5:0] upper;
       reg	carry;		      
-      writeStrobe <= 1'b0;
       
-      if(writeDataStrobe) begin
+      writeDataStrobeD <= writeDataStrobe;      
+      if(writeDataStrobe ^ writeDataStrobeD) begin
       
 	 // parse bytes to be written
 	 case(writeState)
 	   
 	   // skip/parse sector header d5/aa/ad/<sit>
 	   WRITE_STATE_IDLE: begin
+	      // In write phase 0 to 2 check for d5/aa/ad. In write phase 3 the
+	      // encoded sector number is being transferred.
+	      
 	      writePhase <= writePhase + 2'd1;		      
 	      if((writePhase == 2'd0 && dbi != 8'hd5) || 
 		 (writePhase == 2'd1 && dbi != 8'haa) ||
@@ -403,7 +406,7 @@ always @(posedge clk) begin
 		    writeSector <= disk_byte_to_sony[3:0];
 		 
 		    writeState <= WRITE_STATE_PRE;
-		    writeCount <= 9'd0;
+		    writeAddr <= 9'd0;
 		    writePhase <= 2'd0;
 		 
 		    // reset the decoder sum/counter
@@ -416,6 +419,8 @@ always @(posedge clk) begin
 	   
 	   /* (preamble) data decoding */
 	   WRITE_STATE_PRE,WRITE_STATE_DATA: begin
+	      logic [7:0] val = 8'h00;	      
+	      
 	      case(writePhase)
 		2'd0: begin
 		   // first of four gcr encoded 6 bit nibbles
@@ -425,46 +430,41 @@ always @(posedge clk) begin
 		end
 		
 		2'd1: begin
-		   logic [7:0] val = { upper[5:4], disk_byte_to_sony[5:0] } ^ c2w;			   
+		   val = { upper[5:4], disk_byte_to_sony[5:0] } ^ c2w;			   
 		   { carry, c0w } <= {1'b0, c0w} + {1'b0, val} + { 8'h00, carry};
-		   writeCount <= writeCount + 9'd1;		      
-		   writeDataDecoded <= val;
-		   if(writeState == WRITE_STATE_DATA)
-		      writeStrobe <= 1'b1;
 		end
 		
 		2'd2: begin
-		   logic [7:0] val = { upper[3:2], disk_byte_to_sony[5:0] } ^ c0w;
+		   val = { upper[3:2], disk_byte_to_sony[5:0] } ^ c0w;
 		   { carry, c1w } <= {1'b0, c1w} + {1'b0, val} + { 8'h00, carry};
-		   writeCount <= writeCount + 9'd1;
-		   writeDataDecoded <= val;
-		   if(writeState == WRITE_STATE_DATA)
-		      writeStrobe <= 1'b1;
 		end
 		
 		2'd3: begin
-		   logic [7:0] val = { upper[1:0], disk_byte_to_sony[5:0] } ^ c1w;
-		   // don't generate carry as it's not evaluated in phase 0
-		   c2w <= c2w + val + { 7'h00, carry};
-		   writeCount <= writeCount + 9'd1;
-		   writeDataDecoded <= val;
-		   if(writeState == WRITE_STATE_DATA && writeCount != 9'd511)
-		      writeStrobe <= 1'b1;
-		end
-		
+		   val = { upper[1:0], disk_byte_to_sony[5:0] } ^ c1w;
+		   // don't generate carry as it's not evaluated in phase 0		   
+		   if(writeAddr != 9'd511) c2w <= c2w + val + { 7'h00, carry};
+		end	
 	      endcase		      
+
+	      // output data into buffer
+	      if(writePhase) begin
+		 writeDataDecoded <= val;
+		 writeAddr <= writeAddr + 9'd1;
+		 if(writeState == WRITE_STATE_DATA && writeAddr != 9'd511)
+		   writeStrobe <= !writeStrobe;
+	      end
 	      
 	      // skip the first 12 leading bytes (first counter run starts at 1)
-	      if(writeState == WRITE_STATE_PRE && writeCount == 9'd12 && writePhase) begin
+	      if(writeState == WRITE_STATE_PRE && writeAddr == 9'd12 && writePhase) begin
 		 writeState <= WRITE_STATE_DATA;
-		 writeCount <= 9'd0;
-		 writeStrobe <= 1'b1;  // strobe the first data byte
+		 writeAddr <= 9'd0;
+		 writeStrobe <= !writeStrobe;  // strobe the first data byte
 	      end
 	      
 	      // leave data payload state after one complete sector 
-	      if(writeState == WRITE_STATE_DATA && writeCount == 9'd511 && writePhase) begin
+	      if(writeState == WRITE_STATE_DATA && writeAddr == 9'd511 && writePhase) begin
 		 writeState <= WRITE_STATE_CSUM;
-		 writeCount <= 9'd0;
+		 writeAddr <= 9'd0;
 
 		 // current disk byte is the upper bits of the checksum
 		 upper <= disk_byte_to_sony[5:0];
@@ -479,17 +479,23 @@ always @(posedge clk) begin
 	   /* checksum verification. We could actually skip this. If this fails then */
 	   WRITE_STATE_CSUM: begin
 	      writePhase <= writePhase + 2'd1;
-	      
+
 	      case(writePhase)
 		2'd0: begin
+		   logic [7:0] c0x = { upper[5:4], disk_byte_to_sony[5:0] };
+		   
 		   // verify c0w, go into error state on failure
 		   if({ upper[5:4], disk_byte_to_sony[5:0] } != c0w) writeState <= WRITE_STATE_FAIL;
 		end
 		2'd1: begin
+		   logic [7:0] c1x = { upper[3:2], disk_byte_to_sony[5:0] };
+		   
 		   // verify c1w, go into error state on failure
 		   if({ upper[3:2], disk_byte_to_sony[5:0] } != c1w) writeState <= WRITE_STATE_FAIL;
 		end
 		2'd2: begin
+		   logic [7:0] c2x = { upper[1:0], disk_byte_to_sony[5:0] };
+		   
 		   // verify c2w, go into error state on failure
 		   if({ upper[1:0], disk_byte_to_sony[5:0] } != c2w) writeState <= WRITE_STATE_FAIL;
 		   else begin
@@ -500,9 +506,9 @@ always @(posedge clk) begin
 	      endcase // case (writePhase)
 	      
 	      // check if gcr decoder error flag has been raised		      
-	      if(disk_byte_to_sony[6]) writeState <= WRITE_STATE_FAIL;
-		      
-	   end
+	      if(disk_byte_to_sony[6]) writeState <= WRITE_STATE_FAIL;		      
+	   end // case: WRITE_STATE_CSUM
+	   
 	   WRITE_STATE_TRAIL: begin
 	      // sector received successfully, check for final DE/AA
 	      if(writePhase == 2'd0 && writeData != 8'hde) 
@@ -514,7 +520,8 @@ always @(posedge clk) begin
 	      end
 	      
 	      writePhase <= writePhase + 2'd1;
-	   end
+	   end // case: WRITE_STATE_TRAIL
+	   
 	   WRITE_STATE_OK: begin
 	      // sector received correctly
 	      // ...
@@ -522,9 +529,11 @@ always @(posedge clk) begin
 	      // and wait for next sector write attempt
 	      writeState <= WRITE_STATE_IDLE;
 	   end
+	   
 	   WRITE_STATE_FAIL: begin
 	      // handle error state ...
 	      
+	      error <= 1'b1;
 	      // and wait for next sector write attempt
 	      writeState <= WRITE_STATE_IDLE;
 	   end

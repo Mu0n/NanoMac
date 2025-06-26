@@ -39,21 +39,11 @@ module top(
   // interface to external BL616/M0S
   inout [5:0]	m0s,
 
-  // MIDI/UART
-  input			midi_in,
-  output		midi_out,
-		   
   // SD card slot
   output		sd_clk,
   inout			sd_cmd, // MOSI
   inout [3:0]	sd_dat, // 0: MISO
 
-  // SPI connection to ob-board BL616.
-  input			spi_sclk, // in... 
-  input			spi_csn, // in (io?)
-  output		spi_dir, // out
-  input			spi_dat, // in (io?)
-	   
   // hdmi/tdms
   output		tmds_clk_n,
   output		tmds_clk_p,
@@ -482,13 +472,6 @@ macplus macplus (
     //ADC
     .ADC_BUS(),
 
-    //SD-SPI
-    .SD_SCK(),
-    .SD_MOSI(),
-    .SD_MISO(),
-    .SD_CS(),
-    .SD_CD(),
-
     ._romOE(rom_oe_n),
     .romAddr(rom_addr),
     .romData(rom_data),
@@ -502,12 +485,12 @@ macplus macplus (
     .sdram_oe(sdram_oe),
     .sdram_do(sdram_dout),
 
-    .UART_CTS(),
+    .UART_CTS(1'b0),
     .UART_RTS(),
-    .UART_RXD(),
+    .UART_RXD(1'b0),
     .UART_TXD(),
     .UART_DTR(),
-    .UART_DSR()
+    .UART_DSR(1'b0)
 );
 
 wire [5:0] leds;

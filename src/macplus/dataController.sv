@@ -123,14 +123,9 @@ module dataController (
 	
 	// CPU reset generation
 	// For initial CPU reset, RESET and HALT must be asserted for at least 100ms = 800,000 clocks of clk8
-	reg [19:0] resetDelay; // 20 bits = 1 million
+	reg [19:0] resetDelay = 20'hFFFFF;; // 20 bits = 1 million
 	wire isResetting = resetDelay != 0;
 
-	initial begin
-		// force a reset when the FPGA configuration is completed
-	        resetDelay <= 20'hFFFFF;
-	end
-	
 	always @(posedge clk or negedge _systemReset) begin
 		if (_systemReset == 1'b0) begin
 `ifdef VERILATOR
@@ -431,7 +426,7 @@ module dataController (
 		._cpuRW(_cpuRW),
 		._cpuLDS(_cpuLDS),
 		.dataIn(cpuDataIn),
-		.cpuAddrRegHi(cpuAddrRegHi),
+		.cpuAddr(cpuAddrRegHi),
 		.SEL(SEL),
 		.driveSel(driveSel),
 	        .diskWProt(floppy_wprot),

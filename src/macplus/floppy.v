@@ -65,9 +65,7 @@ module floppy
 	input	      cen,
 
 	input	      _reset,
-	input	      ca0, // PH0
-	input	      ca1, // PH1
-	input	      ca2, // PH2
+	input [2:0]   ca,
 	input	      SEL, // HDSEL from VIA
 	input	      lstrb, // aka PH3
 	input	      _enable, 
@@ -92,6 +90,8 @@ module floppy
 	output	      motor,
 	output	      act,
 
+        output error,
+ 
         // Interface to track buffer.
 	output	      trackSide, // side requested by floppy
 	output [6:0]  trackIndex, // index of track requested by floppy
@@ -106,6 +106,7 @@ reg [15:0] driveRegs;
 reg [6:0] driveTrack;
 reg driveSide;
 reg [7:0] diskDataIn; // incoming byte from the floppy disk
+wire stepReady;
 	
 assign motor = ~driveRegs[`DRIVE_REG_MOTORON];
 assign trackIndex = driveTrack;   
@@ -126,7 +127,7 @@ assign trackSide = driveSide;
 		~(driveTrack == 7'h00), // TK0: track 0 indicator
 		driveRegs[`DRIVE_REG_MOTORON], // motor on
 		~diskWProt, // WRTPRT = 0=locked, 1=unlocked
-		1'b1, // STEP = complete
+	        stepReady, // 1'b1, // STEP = complete
 		driveRegs[`DRIVE_REG_CSTIN], // disk in drive
 		driveRegs[`DRIVE_REG_DIRTN] // step direction
 	};
@@ -159,13 +160,14 @@ assign trackSide = driveSide;
 	        .writeData       ( writeData       ),
 	        .writeDataStrobe ( writeDataStrobe ),
 
+                .error(error),
 	        .writeDataDecoded( writeDataDecoded ),
 	        .writeAddr       ( writeAddr        ),
                 .writeSector     ( writeSector      ),
                 .writeStrobe     ( writeStrobe      )
 	);
 	
-	wire [3:0] driveReadAddr = {ca2,ca1,ca0,SEL};
+	wire [3:0] driveReadAddr = {ca,SEL};
 	
 	// a byte is read or written every 128 clocks (2 us per bit * 8 bits = 16 us, @ 8 MHz = 128 clocks)
 	// The CPU must poll for data at least this often, or else an overrun will occur.
@@ -246,7 +248,7 @@ assign trackSide = driveSide;
 			  { driveRegsAsRead[driveReadAddr], 7'h00 };
 
 	// write drive registers
-	wire [2:0] driveWriteAddr = {ca1,ca0,SEL};
+	wire [2:0] driveWriteAddr = {ca[1:0],SEL};
    
 	// DRIVE_REG_DIRTN		0  /* R/W: step direction (0=toward track 79, 1=toward track 0) */
 	always @(posedge clk or negedge _reset) begin
@@ -254,7 +256,7 @@ assign trackSide = driveSide;
 			driveRegs[`DRIVE_REG_DIRTN] <= 1'b0;
 		end 
 		else if(cep && _enable == 1'b0 && lstrbEdge == 1'b1 && driveWriteAddr == `DRIVE_REG_DIRTN) begin
-			driveRegs[`DRIVE_REG_DIRTN] <= ca2;
+			driveRegs[`DRIVE_REG_DIRTN] <= ca[2];
 		end
 	end
 
@@ -271,7 +273,7 @@ assign trackSide = driveSide;
 			ejectIndicatorTimer <= 8'd0;
 		end 
 		else if(cep) begin
-			if (_enable == 1'b0 && lstrbEdge == 1'b1 && driveWriteAddr == `DRIVE_REG_EJECT && ca2 == 1'b1) begin
+			if (_enable == 1'b0 && lstrbEdge == 1'b1 && driveWriteAddr == `DRIVE_REG_EJECT && ca[2]) begin
 				// eject the disk
 				driveRegs[`DRIVE_REG_CSTIN] <= 1'b1;
 				ejectIndicatorTimer <= 8'hFF;
@@ -289,18 +291,26 @@ assign trackSide = driveSide;
 									
 	//`define DRIVE_REG_STEP		2  /* R: drive head stepping (1 = complete) */
  						   /* W: 0 = step drive head */
+        reg [31:0] stepBusy;
+        assign stepReady = stepBusy == 16'd0;   
 	always @(posedge clk or negedge _reset) begin
 		if (_reset == 1'b0) begin	
 			driveTrack <= 0;
+		        stepBusy <= 16'd0;
 		end 
-		else if(cep && _enable == 1'b0 && lstrbEdge == 1'b1 && driveWriteAddr == `DRIVE_REG_STEP && ca2 == 1'b0) begin
+		else if(cep && _enable == 1'b0 && lstrbEdge == 1'b1 && driveWriteAddr == `DRIVE_REG_STEP && ca[2] == 1'b0) begin
+		        stepBusy <= 300000/125;
+		   
 			if (driveRegs[`DRIVE_REG_DIRTN] == 1'b0 && driveTrack != 7'h4F) begin
 				driveTrack <= driveTrack + 1'b1;
 			end
 			if (driveRegs[`DRIVE_REG_DIRTN] == 1'b1 && driveTrack != 0) begin
 				driveTrack <= driveTrack - 1'b1;
 			end
-		end
+		end else if(cep && stepBusy /*> 1 || (stepBusy == 1 && trackReady) */ )
+		  stepBusy <= stepBusy - 16'd1;
+	   // if(trackReady)
+	   //	    stepBusy <= 1'b0;
 	end
 	
 	// DRIVE_REG_MOTORON	4  /* R/W: 0 = motor on */
@@ -309,7 +319,7 @@ assign trackSide = driveSide;
 			driveRegs[`DRIVE_REG_MOTORON] <= 1'b1;
 		end 
 		else if (cep && _enable == 1'b0 && lstrbEdge == 1'b1 && driveWriteAddr == `DRIVE_REG_MOTORON) begin
-			driveRegs[`DRIVE_REG_MOTORON] <= ca2;
+			driveRegs[`DRIVE_REG_MOTORON] <= ca[2];
 		end
 	end
 

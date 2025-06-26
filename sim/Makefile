@@ -13,11 +13,14 @@ FX68K_FILES=fx68k.sv fx68kAlu.sv uaddrPla.sv fx68k_MicroRom.v fx68k_NanoRom.v
 VERILATOR_DIR=/usr/local/share/verilator/include
 VERILATOR_FILES=verilated.cpp verilated_vcd_c.cpp verilated_threads.cpp
 
-NANOMAC_FILES=clocks.v iwm.v addrController.v addrDecoder.v videoTimer.v dataController.sv ncr5380.sv floppy.v rtc.v scc.v videoShifter.v adb.sv floppy_track_encoder.v floppy_track_buffer.v scsi.v uart/rxuart.v uart/txuart.v via6522.v macplus.sv keyboard.v
+NANOMAC_FILES=clocks.v iwm.v addrController.v addrDecoder.v videoTimer.v dataController.sv ncr5380.sv floppy.v rtc.v scc.v videoShifter.v adb.sv floppy_track_codec.v floppy_track_buffer.v scsi.v uart/rxuart.v uart/txuart.v via6522.v macplus.sv keyboard.v
 NANOMAC_DIR=../src/macplus
 
 TANG_FILES=sdram.v
 TANG_DIR=../src/tang/nano20k
+
+MISC_FILES=sd_rw.v sdcmd_ctrl.v
+MISC_DIR=../src/misc
 
 TB=nanomac_tb
 
@@ -29,8 +32,8 @@ EXTRA_LDFLAGS = `sdl2-config --libs` -lSDL2_image
 
 all: $(PRJ)
 
-$(PRJ): $(TB).cpp ${HDL_FILES} Makefile
-	verilator -O3 -Wno-fatal --no-timing --trace-fst --threads 1 --trace-underscore  -top-module $(PRJ)_tb $(VERILATOR_FLAGS) -cc ${HDL_FILES} --exe $(TB).cpp -o ../$(PRJ) -CFLAGS "${EXTRA_CFLAGS}" -LDFLAGS "${EXTRA_LDFLAGS}"
+$(PRJ): $(TB).cpp sd_card.cpp ${HDL_FILES} Makefile
+	verilator -O3 -Wno-fatal --no-timing --trace-fst --threads 1 --trace-underscore  -top-module $(PRJ)_tb $(VERILATOR_FLAGS) -cc ${HDL_FILES} --exe $(TB).cpp sd_card.cpp -o ../$(PRJ) -CFLAGS "${EXTRA_CFLAGS}" -LDFLAGS "${EXTRA_LDFLAGS}"
 	make -j -C ${OBJ_DIR} -f V$(PRJ)_tb.mk
 
 $(PRJ).fst: $(PRJ)

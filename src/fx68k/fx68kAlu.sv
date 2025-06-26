@@ -806,7 +806,7 @@ module ccrTable(
 			row[13],
 			row[14]:	ccrMask = KNZ00;
 			row[15]:	ccrMask = 5'b0;			// TAS/Scc, not used in col 3
-			// default:	ccrMask = CUNUSED;
+			default:	ccrMask = CUNUSED; //TH: was commented out
 			endcase			
 			
 		4:

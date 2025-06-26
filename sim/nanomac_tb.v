@@ -6,6 +6,10 @@ module nanomac_tb
    input	    reset,
    output reg [2:0] phase, 
 
+   input [1:0]	    ram_size,
+
+   output [1:0]	    leds,
+   
    // serial output, mainly for diagrom
    output	    uart_tx,
 
@@ -26,16 +30,14 @@ module nanomac_tb
    // interface to sd card
    input [31:0]	    image_size, // length of image file
    input [1:0]	    image_mounted,
-   output [10:0]    sdc_lba,
-   output [1:0]	    sdc_rd,
-   output [1:0]	    sdc_wr,
-   input	    sdc_done,
-   input	    sdc_busy,
-   input [7:0]	    sdc_data_in,
-   output [7:0]	    sdc_data_out,
-   input	    sdc_data_en,
-   input [8:0]	    sdc_addr,
 
+   // low level sd card interface
+   output	    sdclk,
+   output	    sdcmd,
+   input	    sdcmd_in,
+   output [3:0]	    sddat,
+   input [3:0]	    sddat_in,
+   
    // sdram interface
    output	    sd_clk, // sd clock
    output	    sd_cke, // clock enable
@@ -88,6 +90,52 @@ sdram sdram (
              .we(sdram_we)            // cpu/chipset requests write
 );   
 
+// for floppy IO the SD card itself may be included into the simulation or not
+wire [7:0]       sdc_rd;
+wire [7:0]       sdc_wr;
+wire [31:0]      sdc_lba;
+wire             sdc_busy;
+wire             sdc_done;
+wire             sdc_data_en;
+wire [8:0]       sdc_addr;
+wire [7:0]       sdc_data_in;
+wire [7:0]       sdc_data_out;
+
+// TODO: map different "drives" into different areas of the SD card
+   
+// for now only floppy uses this to address up to 1MB
+assign sdc_lba[31:11] = 21'd0;
+assign sdc_rd[7:2] = 6'b000000;
+assign sdc_wr[7:2] = 6'b000000;   
+
+sd_rw #(
+    .CLK_DIV(3'd1),
+    .SIMULATE(1'b1)
+) sd_card (
+    .rstn(!reset),                 // rstn active-low, 1:working, 0:reset
+    .clk(clk),                     // clock
+
+    // SD card signals
+    .sdclk(sdclk),
+    .sdcmd(sdcmd),
+    .sdcmd_in(sdcmd_in),
+    .sddat(sddat),
+    .sddat_in(sddat_in),
+
+    // user read sector command interface (sync with clk)
+    .rstart(sdc_rd[0]), 
+    .wstart(sdc_wr[0]), 
+    .sector(sdc_lba),
+    .rbusy(sdc_busy),
+    .rdone(sdc_done),
+                 
+    // sector data output interface (sync with clk)
+    .inbyte(sdc_data_out),
+    .outen(sdc_data_en),    // when outen=1, a byte of sector content is read out from outbyte
+    .outaddr(sdc_addr),     // outaddr from 0 to 511, because the sector size is 512
+    .outbyte(sdc_data_in)   // a byte of sector content
+);
+
 macplus macplus (
         //Master input clock
         .CLKIN(clk),
@@ -103,11 +151,11 @@ macplus macplus (
         .audio(audio),
 
 	.configROMSize(1'b1),       // 64k or 128K ROM
-	.configRAMSize(2'd0),       // 128k, 512k, 1MB or 4MB
+	.configRAMSize(ram_size),   // 128k, 512k, 1MB or 4MB
 	.configMachineType(1'b0),   // Plus, SE
 	.configFloppyWProt(2'b00),  // no write protection
 
-        .leds(),
+        .leds(leds),
 
         //ADC
         .ADC_BUS(),
@@ -117,19 +165,12 @@ macplus macplus (
         .kbd_strobe(kbd_strobe),
         .kbd_data(kbd_data),
 
-        //SD-SPI
-        .SD_SCK(),
-        .SD_MOSI(),
-        .SD_MISO(),
-        .SD_CS(),
-        .SD_CD(),
-
         // interface to sd card
 	.sdc_image_size( image_size),
 	.sdc_image_mounted( image_mounted ),
 	.sdc_lba     ( sdc_lba     ),
-	.sdc_rd      ( sdc_rd      ),
-	.sdc_wr      ( sdc_wr      ),
+	.sdc_rd      ( sdc_rd[1:0] ),
+	.sdc_wr      ( sdc_wr[1:0] ),
 	.sdc_busy    ( sdc_busy    ),
 	.sdc_done    ( sdc_done    ),
 	.sdc_data_in ( sdc_data_in ),
@@ -159,14 +200,4 @@ macplus macplus (
         .UART_DSR()
 );
 
-//video_analyzer video_analyzer 
-//(
-// .clk(clk),
-// .hs(hs_n),
-// .vs(vs_n),
-// .pal(),
-// .interlace(),
-// .vreset()
-// );   
-   
 endmodule
