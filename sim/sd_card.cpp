@@ -9,7 +9,21 @@
 #include "Vnanomac_tb.h"
 
 #define SD_CARD_IMG   "FloppyWrite.dsk"
-// #define WRITE_BACK
+#define WRITE_BACK
+
+// disable colorization for easier handling in editors 
+#if 1
+#define RED      "\033[0;31m"
+#define GREEN    "\033[0;32m"
+#define YELLOW   "\033[1;33m"
+#define END      "\033[0m"
+#else
+#define RED
+#define GREEN
+#define YELLOW
+#define END
+#endif
+
 
 // <= 1000  ok
 // >= 5000 early write error -36 at ~15000 msec with FloppyWrite.dsk test
@@ -57,7 +71,7 @@ static void hexdiff(void *data, void *cmp, int size) {
       if(cptr[i] == ptr[i])      
 	printf("%02x ", 0xff&ptr[i]);
       else
-      	printf("\033[1;33m%02x\033[0m ", 0xff&ptr[i]);
+      	printf(YELLOW "%02x" END " ", 0xff&ptr[i]);
     }
       
     printf("  ");
@@ -252,10 +266,12 @@ void sd_handle(float ms, Vnanomac_tb *tb)  {
 	    // and compare it
 	    // printf("%.3fms SDC: WRITE DATA CRC is %s\n", ms, memcmp(sector_data+512, crc_rx, 8)?"INVALID!!!":"ok");
 	    if(memcmp(sector_data+512, crc_rx, 8)) {
-	      printf("CRC received: "); hexdump(crc_rx, 8);
+	      printf(RED "CRC received: "); hexdump(crc_rx, 8);
 	      printf("CRC expected: "); hexdump(sector_data+512, 8);
+	      printf("" END);
 	    } else {
-	      printf("CRC ok: "); hexdump(crc_rx, 8);
+	      printf(GREEN "CRC ok: "); hexdump(crc_rx, 8);
+	      printf("" END);
 	    }
 	    
 	    if(fd) {
@@ -266,7 +282,7 @@ void sd_handle(float ms, Vnanomac_tb *tb)  {
 	      int items = fread(ref, 2, 256, fd);
 	      if(items != 256) perror("fread()");
 
-	      // hexdiff(sector_data, ref, 512);
+	      hexdiff(sector_data, ref, 512);
 	    } else 	    
 	      hexdump(sector_data, 520);
 

@@ -355,7 +355,7 @@ always @ (posedge clk or negedge rstn)
 		   end
 		end
 	        WACK : begin
-                    wack[2'd3 - ridx[1:0]] <= sddatin[0];
+                    wack[ridx[1:0]] <= sddatin[0];
                     if(ridx >= 4-1) begin
                         sddat_stat <= WWAIT;
                         ridx   <= 0; 

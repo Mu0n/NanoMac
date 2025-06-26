@@ -78,11 +78,9 @@ wire [1:0]	      diskMotor;
 
 wire [1:0]	      driveMask = selectExternalDrive?2'b10:2'b01;
       
-// assign diskLED = driveMask & insertDisk & diskAct & diskMotor;  
+assign diskLED = driveMask & insertDisk & diskAct & diskMotor;  
 
 wire		      errorInt, errorExt;   
-   
-assign diskLED = errorInt || errorExt;   
    
 wire sideInt, sideExt;
 wire [6:0] trackInt;  

@@ -46,8 +46,11 @@ module floppy_track_buffer
     output reg [7:0]  sd_data_out
 );
 
+// Keep track of eject events, 
+reg [1:0] ejected = 2'b00;   
+   
 reg [31:0] size [2] = {0,0};   
-assign inserted = { size[1] != 32'd0, size[0] != 32'd0 };   
+assign inserted = { !ejected[1] && size[1] != 32'd0, !ejected[0] && size[0] != 32'd0 };   
 
 // Proper sides handling is actually not needed since the images contain the
 // tracks for both sides subsequently and it doesn't make a difference if
@@ -55,17 +58,21 @@ assign inserted = { size[1] != 32'd0, size[0] != 32'd0 };
 // the second side of a double sided disk. Both are at the same offset
 // within the image file. We handle sides here, anyway, as it's just cleaner.
 assign sides = { size[1] > 32'd409600, size[0] > 32'd409600};   
-   
+
 always @(posedge clk) begin
-   if(sd_img_mounted[0])
-     size[0] <= sd_img_size;
-   else if(eject[0])
-     size[0] <= 32'd0;
+   if(sd_img_mounted[0]) begin
+      size[0] <= sd_img_size;
+      ejected[0] <= 1'b0;
+   end
       
-   if(sd_img_mounted[1])
-     size[1] <= sd_img_size;
-   else if(eject[1])
-     size[1] <= 32'd0;
+   if(sd_img_mounted[1])  begin
+      size[1] <= sd_img_size;
+      ejected[1] <= 1'b0;
+   end
+
+   if(eject[0]) ejected[0] <= 1'b1;
+   if(eject[1]) ejected[1] <= 1'b1;
+   
 end   
    
 // ---------------- calculate side/track into offset into floppy image ---------------
@@ -168,7 +175,7 @@ wire [4:0] track_sector_to_write =
 
 // One single track of up to 12 sectors is kept in local memory. The
 // unique track is identified by drive (0/1), side (0/1) and track index (0..79)
-wire [7:0] track_requested = {drive, track};
+wire [7:0] track_requested = ejected[drive]?8'hff:{drive, track};
 
 // The track buffer signals "ready" whenever the track requested by the mac/iwm/floppy
 // is actually the one that's currently stored in the buffer. Only then can the iwm
@@ -199,7 +206,7 @@ always @(posedge clk) begin
       
       case(track_loader_state)
 	// idle state
-	0: if(!ready && !sd_busy && inserted[drive]) begin
+	0: if(!ready && !sd_busy && (size[drive] != 32'd0)) begin
 	   // the wrong track is in buffer, there's a disk in the requested drive
 	   // and the sd card is not busy -> load the right track, but flush any
 	   // dirty sectors before
@@ -211,16 +218,18 @@ always @(posedge clk) begin
 
 	      // soff and spt are currently derived from track_in_buffer/iotrack as
 	      // the requested track/side/drive is _not_ the one to flush to
+
+	      // TODO: check if spt still needs to be derived from iotrack
 	      sd_lba <= (sides[track_in_buffer_drive]?{soff,1'b0}:{1'b0,soff}) + 
 			{ 6'd0, track_sector_to_write };	       // write first dirty sector     
 
 	      // request sd card write
-//	      sd_wr <= track_in_buffer_drive?2'b10:2'b01;
-//	      track_loader_state <= 8'd5;
+	      sd_wr <= track_in_buffer_drive?2'b10:2'b01;
+	      track_loader_state <= 8'd5;
 
-	      track_loader_state <= 8'd6;
+//	      track_loader_state <= 8'd6;   // skip actual write
 
-	   end else begin	   
+	   end else if(inserted[drive] && track_requested != 8'hff) begin
 	      track_in_buffer <= 8'hff;      // mark buffer contents invalid
 
 	      // latch current track information as it may change during sd card access
@@ -247,8 +256,9 @@ always @(posedge clk) begin
 
 	   // act on falling edge of strobe when all signals had some time to settle
 	   if( writeStrobe ^ writeStrobeD ) begin
-	      track_buffer_dirty[writeSector] <= 1'b1;	      
-	      track_buffer[{writeSector, writeAddr}] <= writeDataDecoded;
+	      logic [4:0] wr_sector = {1'b0,writeSector}+(side?{1'b0,spt}:5'd0);
+	      track_buffer_dirty[wr_sector] <= 1'b1;	      
+	      track_buffer[{wr_sector, writeAddr}] <= writeDataDecoded;
 	   end
 	end
 

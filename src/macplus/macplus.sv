@@ -44,13 +44,6 @@ module macplus
 	input	      kbd_strobe,
 	input [9:0]   kbd_data,
 
-	//SD-SPI
-	output	      SD_SCK,
-	output	      SD_MOSI,
-	input	      SD_MISO,
-	output	      SD_CS,
-	input	      SD_CD,
-
         // set the real-world inputs to sane defaults
 	input	      configROMSize, // 64k or 128K ROM
 	input [1:0]   configRAMSize, // 128k, 512k, 1MB or 4MB
@@ -94,8 +87,6 @@ module macplus
 );
 
 assign ADC_BUS  = 'Z;
-
-assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
 // floppy disk interface
 wire [1:0]	      diskLED;

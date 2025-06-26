@@ -41,7 +41,7 @@ extern void sd_handle(float ms, Vnanomac_tb *tb);
 // seek after failing write @ 15.856
 // 15.5 -> waits forever in seek
 
-// #define TRACESTART 15.4
+// #define TRACESTART 26.0
 
 #ifdef TRACESTART
 #define TRACEEND     (TRACESTART + 0.5)
