@@ -17,9 +17,11 @@ static Vnanomac_tb *tb;
 static VerilatedFstC *trace;
 static double simulation_time;
 
+extern void sd_handle(float ms, Vnanomac_tb *tb);
+
 #define ROM "plusrom.bin"
-#define DISK_INT "../disks/system30.dsk"
-// #define DISK_EXT "../disks/MacMan 1.0.dsk"
+
+#define RAM_SIZE 0    // 0=128k, 1=512k, 2=1MB, 3=4MB
 
 #define TICKLEN   (0.5/16000000)
 
@@ -27,19 +29,37 @@ static double simulation_time;
 
 // times with 128k ram
 // #define TRACESTART 0.0
-// #define TRACESTART 0.7
-// #define TRACESTART 1.9   // kbd model cmd and first IWM access
+// #define TRACESTART 1.9   // kbd model cmd and first iwm access
 // #define TRACESTART 2.2   // checkerboard, kbd  inquiry cmd
-// #define TRACESTART 4.2   // floppy boot start
+// #define TRACESTART 2.8   // tachometer calibration (until ~ 2.97)
+// #define TRACESTART 3.9   // -"- (until ~ 2.97)
+// #define TRACESTART 4.1   // floppy boot start
 // #define TRACESTART 5.1   // Sony write called
 // #define TRACESTART 20.0   // 128k / system 3.0 desktop reached
 
+// read done before failing write @ 15.495
+// seek after failing write @ 15.856
+// 15.5 -> waits forever in seek
+
+// #define TRACESTART 15.4
+
 #ifdef TRACESTART
-#define TRACEEND     (TRACESTART + 0.1)
+#define TRACEEND     (TRACESTART + 0.5)
 #endif
 
 // floppy disk lba to side/track/sector translation table
 int fdc_map[2][1600][3];
+
+char *sector_string(uint32_t lba) {
+  static char str[32];
+
+  if(lba >= 1600)
+    sprintf(str, "<out of range %u>", lba);
+  else
+    sprintf(str, "CHS %d/%d/%d",
+	    fdc_map[1][lba][1],fdc_map[1][lba][0],fdc_map[1][lba][2]);
+  return str;
+}
 
 /* =============================== video =================================== */
 
@@ -329,21 +349,6 @@ unsigned short ram[4*512*1024];  // 4 Megabytes
 // the sdram
 uint32_t sdram[2*1024*1024];  // 2M 32 bit words
 
-FILE *sdc_fd[2] = { NULL, NULL };
-
-char *disk_names[] = {
-#ifdef DISK_INT
-  (char*)DISK_INT,
-#else
-  NULL,
-#endif  
-#ifdef DISK_EXT
-  (char*)DISK_EXT
-#else
-  NULL
-#endif  
-};
-
 // proceed simulation by one tick
 void tick(int c) {
   static uint64_t ticks = 0;
@@ -352,6 +357,12 @@ void tick(int c) {
 
   tb->clk = c;
 
+  static  int leds = 0;
+  if(leds != tb->leds) {
+    printf("%.3fms LEDs now %s/%s <---------------------\n", simulation_time*1000, (tb->leds&2)?"on":"off", (tb->leds&1)?"on":"off");
+    leds = tb->leds;
+  }
+  
   if(c /* && !tb->reset */ ) {
     // leave reset after 2 ms of simulation time
     if ( tb->reset && simulation_time > 0.002) {
@@ -365,162 +376,10 @@ void tick(int c) {
       tb->kbd_strobe = !tb->kbd_strobe;
       tb->kbd_data = 0x01;   // should be 'a'      
     }
-      
-    // ---------------------------- sd card -------------------------
-    static int sdc_delay = 0;
-    static int sdc_write_cnt = 0;
-    if(sdc_delay) {
-      sdc_delay--;
-      tb->sdc_data_en = 0;
-    } else {
-      static int sdc_state = 0;
-      static unsigned char sector_buffer[512];
-      static int drive = -1;
-      static int sides[2] = {0,0};
 
-      // simulate disk image insertion
-      static int insert_counter = 0;
-
-      if(insert_counter < 2000) {
-	int d = insert_counter / 1000;
-	if((insert_counter % 1000) == 800) {
-	  if(disk_names[d]) sdc_fd[d] = fopen(disk_names[d], "rb");
-
-	  if(sdc_fd[d]) {
-	    fseek(sdc_fd[d], 0, SEEK_END);
-	    int size = ftell(sdc_fd[d]);
-	    sides[d] = size > 800*512;
-	    printf("%.3fms SDC drive, %d mounting %s, size = %d (%s sided)\n",
-		   simulation_time*1000, d, disk_names[d], size, sides[d]?"double":"single");
-	    tb->image_size = size;
-	  }
-	}
-	  
-	if(sdc_fd[d]) {	  
-	  if((insert_counter % 1000) == 850 ) tb->image_mounted = (1<<d);
-	  if((insert_counter % 1000) == 860 ) tb->image_mounted = 0;
-	}
-
-	insert_counter++;
-      }
-      
-      if(sdc_state == 0) {
-	if(tb->sdc_wr & 3) {
-	  if(tb->sdc_wr & 1) drive = 0;
-	  else               drive = 1;
-	  
-	  printf("%.3fms SDC WR drv %d, lba %d = %d/%d/%d\n", simulation_time*1000,
-		 drive, tb->sdc_lba,
-		 fdc_map[sides[drive]][tb->sdc_lba][0],
-		 fdc_map[sides[drive]][tb->sdc_lba][1],
-		 fdc_map[sides[drive]][tb->sdc_lba][2]);
-
-	  tb->sdc_addr = 0;
-	  sdc_write_cnt = 512;
-	  sdc_delay = 100;
-	  sdc_state = 7;
-	}
-	  
-	if(!tb->sdc_busy && (tb->sdc_rd & 3)) {
-	  if(tb->sdc_rd & 1) drive = 0;
-	  else               drive = 1;
-	  
-	  printf("%.3fms SDC RD drv %d, lba %d = %d/%d/%d\n", simulation_time*1000,
-		 drive, tb->sdc_lba,
-		 fdc_map[sides[drive]][tb->sdc_lba][0],
-		 fdc_map[sides[drive]][tb->sdc_lba][1],
-		 fdc_map[sides[drive]][tb->sdc_lba][2]);
-	  
-	  fseek(sdc_fd[drive], 512*tb->sdc_lba, SEEK_SET);
-	  if(fread(sector_buffer, 1, 512, sdc_fd[drive]) != 512) {
-	    printf("SDC READ ERROR\n");
-	    exit(-1);
-	  }
-	  sdc_state = 1;
-	  // wait some time before raising busy
-	  sdc_delay = 10;
-	  tb->sdc_done = 0;
-	}
-      } else if(sdc_state == 1) {
-	tb->sdc_busy = 1;
-	sdc_state = 2;	
-	// wait before lowering busy
-	sdc_delay = 1000;	// <---- this is the place to simulate a slow reading sd card
-      } else if(sdc_state == 2) {
-	tb->sdc_done = 1;
-	sdc_state = 3;	
-	// wait before first data
-	sdc_delay = 10;	
-      } else if(sdc_state == 3) {
-	tb->sdc_addr = 0;
-	tb->sdc_data_in = sector_buffer[tb->sdc_addr];
-	tb->sdc_data_en = 1;
-	sdc_state = 4;	
-	sdc_delay = 3;
-      } else if(sdc_state == 4) {
-	// send data
-	if(tb->sdc_addr < 511) {	
-	  tb->sdc_addr++;
-	  tb->sdc_data_in = sector_buffer[tb->sdc_addr];
-	  tb->sdc_data_en = 1;
-	  sdc_delay = 3;
-	} else {
-	  sdc_state = 5;
-	  sdc_delay = 20;
-	}
-      } else if(sdc_state == 5) {
-	// release done and busy
-	tb->sdc_done = 0;
-	tb->sdc_busy = 0;
-	sdc_state = 6;
-	sdc_delay = 20;
-      } else if(sdc_state == 6) {
-	sdc_state = 0;
-	sdc_delay = 20;
-      } else if(sdc_state == 7) {
-	tb->sdc_busy = 1;
-	sdc_delay = 20;
-	sdc_state = 8;
-      } else if(sdc_state == 8) {
-	static unsigned char rx_buffer[512];
-	
-	// receive 512 bytes sector data from core	
-	if(sdc_write_cnt) {	  
-	  // printf("WR %d, %08x = %02x\n", 512-sdc_write_cnt,  tb->sdc_addr, tb->sdc_data_out);
-	  rx_buffer[tb->sdc_addr++] = tb->sdc_data_out;
-
-	  sdc_write_cnt -= 1;	
-	  sdc_delay = 10;
-
-	  if(sdc_write_cnt == 0) {
-	    unsigned char refsec[512];
-	    
-	    // load sector for comparison to display the changes
-	    fseek(sdc_fd[drive], 512*tb->sdc_lba, SEEK_SET);
-	    if(fread(refsec, 1, 512, sdc_fd[drive]) != 512) {
-	      printf("SDC READ ERROR\n");
-	      exit(-1);
-	    }
-	      
-	    hexdiff(rx_buffer, refsec, 512);
-
-	    // We might write the sector back to the image. But since
-	    // we don't really interactively change disk contents we
-	    // don't do this.
-	    
-	    printf("WR done\n");
-	    sdc_delay = 100;
-	    tb->sdc_done = 1;
-	    sdc_state = 9;
-	  }
-	}      
-      } else if(sdc_state == 9) {
-	printf("WR not busy\n");
-	tb->sdc_busy = 0;
-	sdc_state = 0;
-      }
-    }
-      
+    // process sd card signals
+    sd_handle(simulation_time*1000, tb);
+    
     // ------------------------------------ simulate sdram -------------------------------------
     int sdram_has_returned_data = 0;
     if(!tb->sd_cs) {
@@ -641,6 +500,13 @@ void tick(int c) {
   simulation_time += TICKLEN;
 }
 
+void fexit(void) {
+  if(ad) {
+    fclose(ad);
+    ad = NULL;
+  }
+}
+
 int main(int argc, char **argv) {
   // Initialize Verilators variables
   Verilated::commandArgs(argc, argv);
@@ -651,6 +517,8 @@ int main(int argc, char **argv) {
   trace->spTrace()->set_time_resolution("1ps");
   simulation_time = 0;
 
+  atexit(fexit);
+ 
   // create fdc lba map
   int lba_ds = 0;
   int lba_ss = 0;
@@ -690,7 +558,8 @@ int main(int argc, char **argv) {
   trace->open("nanomac.fst");
   
   tb->reset = 1;
-
+  tb->ram_size = RAM_SIZE;
+  
   /* run for a while */
   while(
 #ifdef TRACEEND
@@ -720,9 +589,5 @@ int main(int argc, char **argv) {
   trace->close();
 
   //  hexdump(ram, 128*1024);
-
-  for(int i=0;i<2;i++)
-    if(sdc_fd[i]) fclose(sdc_fd[i]);
-  
-  if(ad) fclose(ad);  
+  fexit();
 }
