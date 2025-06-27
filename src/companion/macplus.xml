@@ -38,11 +38,21 @@
   <menu label="NanoMac">
     <fileselector label="Int. Floppy:" ext="dsk" index="0"/>
     <fileselector label="Ext. Floppy:" ext="dsk" index="1"/>
+    <list label="Floppy prot.:" id="W" default="3">
+      <listentry label="None" value="0"/>
+      <listentry label="Internal" value="1"/>
+      <listentry label="External" value="2"/>
+      <listentry label="Both" value="3"/>
+    </list>
     <list label="Memory:" id="Y" default="2" action="reset">
       <listentry label="128kB" value="0"/>
       <listentry label="512kB" value="1"/>
       <listentry label="1MB" value="2"/>
       <listentry label="4MB" value="3"/>
+    </list>
+    <list label="Screen:" id="X" default="0">
+      <listentry label="Normal" value="0"/>
+      <listentry label="Wide" value="1"/>
     </list>
     <button label="Save settings" action="save"/>
     <button label="Reset" action="reset_hide"/>

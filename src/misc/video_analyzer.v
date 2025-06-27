@@ -7,11 +7,11 @@
 module video_analyzer 
 (
  // system interface
- input		  clk,
- input		  hs,
- input		  vs,
-
- output reg	  vreset
+ input	    clk,
+ input	    hs,
+ input	    vs,
+ input	    wide,
+ output reg vreset
 );
    
 
@@ -23,11 +23,19 @@ reg [11:0] hcntL;
 reg [9:0] vcnt;
 reg [9:0] vcntL;
 reg changed;
-
+reg wideL;
+   
 always @(posedge clk) begin
     // ---- hsync processing -----
     hsD <= hs;
 
+    // make sure changes in wide/normal also trigger
+    // a vreset
+    if(wide != wideL) begin
+       changed <= 1'b1;
+       wideL <= wide;
+    end
+   
     // begin of hsync, falling edge
     if(!hs && hsD) begin
         // check if line length has changed during last cycle
@@ -60,9 +68,8 @@ always @(posedge clk) begin
    
    vreset <= 1'b0;
    // account for back porches to adjust image position within the
-   // HDMI frame. Values for HDMI test: (hcnt == 99) && (vcnt == 8)
-	 
-   if( (hcnt == 181) && (vcnt == 27) && changed) begin
+   // HDMI frame.	 
+   if( (hcnt == (wide?12'd117:12'd181)) && (vcnt == 10'd27) && changed) begin
       vreset <= 1'b1;
       changed <= 1'b0;
    end

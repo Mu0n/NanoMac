@@ -1,5 +1,7 @@
 # NanoMac
 
+> Ich sei, gewährt mir die Bitte, in Eurem Bunde der Dritte. ~Friedrich Schiller~
+
 NanoMac is a port of the [PlusToo](https://www.bigmessowires.com/2012/12/15/plus-too-files/) Apple Macintosh Plus FPGA implementation to the [Tang Nano 20K](https://wiki.sipeed.com/hardware/en/tang/tang-nano-20k/nano-20k.html) FPGA development boards.
 
 ![NanoMac](images/nanomac.jpeg)
@@ -14,14 +16,14 @@ Current state:
   * PlusToo core working
   * ROM stored in flash ROM
   * 128k, 512k, 1M or 4M ram configurable
-  * Support for two floppy disk images in DSK format
+  * Read and write support for two floppy disk images in DSK format
   * HDMI video using the original 512x342p@60Hz mode
   * Keyboard and Mouse via USB
   * [Fully simulated](sim)
 
 Planned features:
-  * Many more code cleanups 
-  * Floppy disk write support
+  * More code cleanups
+  * Enable SCSI support
 
 ## Videos
 

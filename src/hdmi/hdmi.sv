@@ -40,47 +40,43 @@ module hdmi
     parameter bit [7:0] SOURCE_DEVICE_INFORMATION = 8'h00 // See README.md or CTA-861-G for the list of valid codes
 )
 (
-    input logic 		      clk_pixel_x5,
-    input logic 		      clk_pixel,
-    input logic 		      clk_audio,
+    input logic			      clk_pixel_x5,
+    input logic			      clk_pixel,
+    input logic			      clk_audio,
 
     // synchronous reset back to 0,0
-    input logic 		      reset,
-    input logic [23:0] 		      rgb, 
+    input logic			      reset,
+    input logic                       wide,
+    input logic [23:0]		      rgb, 
     input logic [AUDIO_BIT_WIDTH-1:0] audio_sample_word [1:0],
 
     // These outputs go to your HDMI port
-    output logic [2:0] 		      tmds,
-    output logic 		      tmds_clock
+    output logic [2:0]		      tmds,
+    output logic		      tmds_clock
 );
 
 localparam int NUM_CHANNELS = 3;
 logic hsync;
 logic vsync;
 
-logic [1:0] invert;
+// sync polarity
+logic [1:0] invert = 2'b11;
 
 // Classic Mac           start     frame   screen s_start   s_len
-wire [54:0] htiming  = { 11'd0,   11'd704, 11'd512, 11'd14, 11'd3 };  
-wire [39:0] vtiming  = {          10'd370, 10'd342,  10'd0, 10'd4 };
-// from PlusToo
-//wire [54:0] htiming  = { 11'd0,   11'd672, 11'd512, 11'd24, 11'd72 };  
-//wire [39:0] vtiming  = {          10'd403, 10'd342,  10'd5,  10'd5 };
+wire [54:0] htiming   = { 11'd0,   11'd704, 11'd512, 11'd14, 11'd3 };  
+wire [54:0] htiming_w = { 11'd0,   11'd704, 11'd640, 11'd14, 11'd3 };  
+wire [39:0] vtiming   = {          10'd370, 10'd342,  10'd0, 10'd4 };
 wire [7:0] cea = 8'd17; // CEA is HDMI mode in group 1
    
-wire [102:0]  timing = {  htiming, vtiming, cea };
+wire [102:0]  timing = {  wide?htiming_w:htiming, vtiming, cea };
 
 // demux timing parameters   
 wire [10:0] start_x           = timing[102:92];
-
 wire [10:0] frame_width       = timing[91:81];
 wire [10:0] screen_width      = timing[80:70];
 wire [10:0] hsync_pulse_start = timing[69:59];
 wire [10:0] hsync_pulse_size  = timing[58:48];
 
-// if we have a short frame, then the scandoubler outputs two lines less
-// if amiga outputs interlaced video, then the scandoubler outputs one line
-// less resulting in an odd overall frame height
 wire [9:0] frame_height       = timing[47:38];
 wire [9:0] screen_height      = timing[37:28];
 wire [9:0] vsync_pulse_start  = timing[27:18];
@@ -88,8 +84,6 @@ wire [9:0] vsync_pulse_size   = timing[17: 8];
 
 wire [7:0] cea                = timing[7:0]; 
    
-assign invert = 2'b11;
-
 reg [10:0] cx;
 reg [9:0] cy;
 

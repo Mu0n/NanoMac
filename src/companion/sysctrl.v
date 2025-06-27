@@ -25,6 +25,7 @@ module sysctrl (
 
   // values that can be configured by the user		
   output  	    system_reset,
+  output reg 	    system_widescreen,
   output reg [1:0]  system_memory,
   output reg [1:0]  system_floppy_wprot
 );
@@ -85,6 +86,7 @@ always @(posedge clk) begin
 
       // OSD value defaults. These should be sane defaults, but the MCU
       // will very likely override these early
+      system_widescreen <= 1'b0;           // normal screen by default      
       system_memory <= 2'd0;               // 128k TODO: 1M
       system_floppy_wprot <= 2'b11;        // both disks write protected
    end else begin // if (reset)
@@ -161,8 +163,8 @@ always @(posedge clk) begin
                // second byte can be any character which identifies the variable to set 
                if(state == 4'd0) id <= data_in;
 
-	       // Amiga/Nanomig specific control values
-                if(state == 4'd1) begin
+	       // Mac/Nanomac specific control values
+               if(state == 4'd1) begin
                    // Value "R": reset(1) or run(0)
                    if(id == "R") begin
 		      main_reset <= data_in[0];
@@ -174,6 +176,8 @@ always @(posedge clk) begin
 		   if(id == "Y") system_memory <= data_in[1:0];
 		   // Value "W": Floppy write protect int (0) and ext (1)
 		   if(id == "W") system_floppy_wprot <= data_in[1:0];
+		   // Value "X": Normal(0) or Wide(1) screen
+		   if(id == "X") system_widescreen <= data_in[0];
                 end
             end
 
