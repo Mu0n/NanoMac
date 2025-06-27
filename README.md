@@ -1,6 +1,6 @@
 # NanoMac
 
-> Ich sei, gewährt mir die Bitte, in Eurem Bunde der Dritte. ~Friedrich Schiller~
+> Ich sei, gewährt mir die Bitte, in Eurem Bunde der Dritte. Friedrich Schiller
 
 NanoMac is a port of the [PlusToo](https://www.bigmessowires.com/2012/12/15/plus-too-files/) Apple Macintosh Plus FPGA implementation to the [Tang Nano 20K](https://wiki.sipeed.com/hardware/en/tang/tang-nano-20k/nano-20k.html) FPGA development boards.
 
