@@ -21,43 +21,45 @@ extern void sd_handle(float ms, Vnanomac_tb *tb);
 
 #define ROM "plusrom.bin"
 
-#define RAM_SIZE 0    // 0=128k, 1=512k, 2=1MB, 3=4MB
+#define RAM_SIZE 1    // 0=128k, 1=512k, 2=1MB, 3=4MB
 
 #define TICKLEN   (0.5/16000000)
 
 // #define DEBUG_MEM
 
-// times with 128k ram
+// times with 128k ram, 512k delays everything by 2.7 seconds
 // #define TRACESTART 0.0
 // #define TRACESTART 1.9   // kbd model cmd and first iwm access
-// #define TRACESTART 2.2   // checkerboard, kbd  inquiry cmd
+// #define TRACESTART 2.2   // checkerboard, kbd  inquiry cmd, first SCSI
 // #define TRACESTART 2.8   // tachometer calibration (until ~ 2.97)
 // #define TRACESTART 3.9   // -"- (until ~ 2.97)
 // #define TRACESTART 4.1   // floppy boot start
 // #define TRACESTART 5.1   // Sony write called
 // #define TRACESTART 20.0   // 128k / system 3.0 desktop reached
 
-// read done before failing write @ 15.495
-// seek after failing write @ 15.856
-// 15.5 -> waits forever in seek
-
-// #define TRACESTART 26.0
+// #define TRACESTART 4.85
 
 #ifdef TRACESTART
-#define TRACEEND     (TRACESTART + 0.5)
+#define TRACEEND     (TRACESTART + 0.2)
 #endif
 
 // floppy disk lba to side/track/sector translation table
 int fdc_map[2][1600][3];
 
-char *sector_string(uint32_t lba) {
+char *sector_string(int drive, uint32_t lba) {
   static char str[32];
 
-  if(lba >= 1600)
-    sprintf(str, "<out of range %u>", lba);
-  else
-    sprintf(str, "CHS %d/%d/%d",
-	    fdc_map[1][lba][1],fdc_map[1][lba][0],fdc_map[1][lba][2]);
+  if(drive < 2) {  
+    if(lba >= 1600)
+      sprintf(str, "<out of range %u>", lba);
+    else
+      sprintf(str, "CHS %d/%d/%d",
+	      fdc_map[1][lba][1],fdc_map[1][lba][0],fdc_map[1][lba][2]);
+    
+    return str;
+  }
+
+  strcpy(str, "");
   return str;
 }
 
@@ -359,7 +361,7 @@ void tick(int c) {
 
   static  int leds = 0;
   if(leds != tb->leds) {
-    printf("%.3fms LEDs now %s/%s <---------------------\n", simulation_time*1000, (tb->leds&2)?"on":"off", (tb->leds&1)?"on":"off");
+    printf("%.3fms LEDs %s/%s\n", simulation_time*1000, (tb->leds&2)?"on":"off", (tb->leds&1)?"on":"off");
     leds = tb->leds;
   }
   

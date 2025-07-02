@@ -210,8 +210,8 @@ sysctrl sysctrl (
 // -------------------------- SD card -------------------------------
 
 wire [31:0] sdc_lba;
-wire [7:0]  sdc_rd;
-wire [7:0]  sdc_wr;
+wire [3:0]  sdc_rd;
+wire [3:0]  sdc_wr;
 wire        sdc_busy;
 wire        sdc_done;
 wire [8:0]  sdc_addr;
@@ -219,10 +219,8 @@ wire [7:0]  sdc_data_read;
 wire [7:0]  sdc_data_write;
 wire        sdc_data_read_en;
 
-// for now only floppy uses this to address up to 1MB
-assign sdc_lba[31:11] = 21'd0;
-assign sdc_rd[7:2] = 6'b000000;
-assign sdc_wr[7:2] = 6'b000000;   
+//assign sdc_rd[7:4] = 4'b0000;
+//assign sdc_wr[7:4] = 4'b0000;   
 
 wire [31:0] sdc_image_size;
 wire [7:0] sdc_image_mounted;   
@@ -254,8 +252,8 @@ sd_card #(
     .iack(sdc_iack),
 
     // user read sector command interface (sync with clk)
-    .rstart( sdc_rd ),
-    .wstart( sdc_wr ), 
+    .rstart( {4'b0000, sdc_rd} ),
+    .wstart( {4'b0000, sdc_wr} ), 
     .rsector( sdc_lba ),
     .inbyte( sdc_data_write ),
 
@@ -454,10 +452,10 @@ macplus macplus (
  
     // interface to sd card
     .sdc_image_size ( sdc_image_size ),
-    .sdc_image_mounted ( sdc_image_mounted[1:0] ),
-    .sdc_lba     ( sdc_lba[10:0]    ),
-    .sdc_rd      ( sdc_rd[1:0]      ),
-    .sdc_wr      ( sdc_wr[1:0]      ),
+    .sdc_image_mounted ( sdc_image_mounted[3:0] ),
+    .sdc_lba     ( sdc_lba          ),
+    .sdc_rd      ( sdc_rd           ),
+    .sdc_wr      ( sdc_wr           ),
     .sdc_busy    ( sdc_busy         ),
     .sdc_done    ( sdc_done         ),
     .sdc_data_in ( sdc_data_read    ),

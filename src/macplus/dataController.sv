@@ -75,32 +75,49 @@ module dataController (
 		       
         // sd card interface
 	input [31:0]	       sdc_img_size,
-	input [1:0]	       sdc_img_mounted,
-	output [10:0]	       sdc_lba,
-	output [1:0]	       sdc_rd,
-	output [1:0]	       sdc_wr,
+	input [SCSI_DEVS+1:0]  sdc_img_mounted,
+	output [31:0]	       sdc_lba,
+	output [SCSI_DEVS+1:0] sdc_rd,
+	output [SCSI_DEVS+1:0] sdc_wr,
 	input		       sdc_done,
 	input		       sdc_busy,
 	input [7:0]	       sdc_data_in,
 	output [7:0]	       sdc_data_out,
 	input		       sdc_data_en,
-	input [8:0]	       sdc_addr,
- 
-	// connections to io controller
-	input [SCSI_DEVS-1:0]  img_mounted,
-	input [31:0]	       img_size,
-	output [31:0]	       io_lba[SCSI_DEVS],
-	output [SCSI_DEVS-1:0] io_rd,
-	output [SCSI_DEVS-1:0] io_wr,
-	input [SCSI_DEVS-1:0]  io_ack,
-	input [7:0]	       sd_buff_addr,
-	input [15:0]	       sd_buff_dout,
-	output [15:0]	       sd_buff_din[SCSI_DEVS],
-	input		       sd_buff_wr
+	input [8:0]	       sdc_addr 
 );
 	
 	parameter SCSI_DEVS = 2;
-	
+
+        // ---------- demux between iwm and scsi depending on request -------------
+        reg  scsi_io = 1'b0;    // toggle between scsi and iwm
+        reg  scsi_dev = 1'b0;   // toggle between scsi 0/1
+
+        always @(posedge clk) begin
+             if(selectIWM)  scsi_io <= 1'b0;
+             if(selectSCSI) scsi_io <= 1'b1;
+
+	     if(sdc_rd[3] | sdc_wr[3]) scsi_dev <= 1'b1;	   
+	     if(sdc_rd[2] | sdc_wr[2]) scsi_dev <= 1'b0;	   
+        end
+
+        wire [1:0] io_ack = 
+		   (scsi_io && !scsi_dev)?{1'b0, sdc_busy}:
+		   (scsi_io &&  scsi_dev)?{sdc_busy, 1'b0}:
+		   2'b00;
+   
+        wire [7:0]	  scsi_data_out[SCSI_DEVS];
+        wire [7:0]	  iwm_data_out;
+        assign sdc_data_out = scsi_io?scsi_data_out[scsi_dev]:iwm_data_out;
+   
+        // demux requests from iwm and scsi
+        wire [10:0] iwm_lba;
+        wire [31:0] scsi_lba[SCSI_DEVS];
+        assign sdc_lba = 
+                    (scsi_io && (sdc_rd[3]|sdc_wr[3]))?scsi_lba[1]:
+		    (scsi_io && (sdc_rd[2]|sdc_wr[2]))?scsi_lba[0]:
+		    { 21'd0, iwm_lba };   
+   
 	// add binary volume levels according to volume setting
 	assign audioOut = 
 		(snd_vol[0]?audio_x1:11'd0) +
@@ -185,17 +202,17 @@ module dataController (
 		.rdata(scsiDataOut),
 
 		// connections to io controller
-		.img_mounted( img_mounted ),
-		.img_size( img_size ),
-		.io_lba ( io_lba ),
-		.io_rd ( io_rd ),
-		.io_wr ( io_wr ),
+		.img_mounted( sdc_img_mounted[SCSI_DEVS+1:2] ),
+		.img_size( { 9'd0, sdc_img_size[31:9] } ),   // size of 512byte blocks
+		.io_lba ( scsi_lba ),
+		.io_rd ( sdc_rd[3:2] ),  // TODO: enabling both breaks floppy (and scsi) on FPGA
+		.io_wr ( sdc_wr[3:2] /*sdc_wr[SCSI_DEVS+1:2]*/ ),   // -"-
 		.io_ack ( io_ack ),
 
-		.sd_buff_addr(sd_buff_addr),
-		.sd_buff_dout(sd_buff_dout),
-		.sd_buff_din(sd_buff_din),
-		.sd_buff_wr(sd_buff_wr)
+		.sd_buff_addr(sdc_addr),
+		.sd_buff_dout(sdc_data_in),
+		.sd_buff_din(scsi_data_out),
+		.sd_buff_wr(sdc_data_en)
 	);
 
 	// count vblanks, and set 1 second interrupt after 60 vblanks
@@ -435,14 +452,14 @@ module dataController (
 	      
                 // interface to sd card
 	        .sd_img_size     ( sdc_img_size    ),
-	        .sd_img_mounted    ( sdc_img_mounted    ),
-	        .sd_lba     ( sdc_lba     ),
-	        .sd_rd      ( sdc_rd      ),
-	        .sd_wr      ( sdc_wr      ),
+	        .sd_img_mounted    ( sdc_img_mounted[1:0] ),
+	        .sd_lba     ( iwm_lba ),
+	        .sd_rd      ( sdc_rd[1:0] ),
+	        .sd_wr      ( sdc_wr[1:0] ),
 	        .sd_busy    ( sdc_busy    ),
 	        .sd_done    ( sdc_done    ),
 	        .sd_data_in ( sdc_data_in ),
-	        .sd_data_out( sdc_data_out),
+	        .sd_data_out( iwm_data_out),
 	        .sd_data_en ( sdc_data_en ),
 	        .sd_addr    ( sdc_addr    )
 	);

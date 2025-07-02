@@ -28,8 +28,8 @@ module nanomac_tb
    input [7:0]	    kbd_data, 
    
    // interface to sd card
-   input [31:0]	    image_size, // length of image file
-   input [1:0]	    image_mounted,
+   input [31:0]	    image_size,      // length of image file
+   input [3:0]	    image_mounted,   // two floppy drives, two scsi drives
 
    // low level sd card interface
    output	    sdclk,
@@ -104,10 +104,10 @@ wire [7:0]       sdc_data_out;
 // TODO: map different "drives" into different areas of the SD card
    
 // for now only floppy uses this to address up to 1MB
-assign sdc_lba[31:11] = 21'd0;
-assign sdc_rd[7:2] = 6'b000000;
-assign sdc_wr[7:2] = 6'b000000;   
-
+assign sdc_lba[31:24] = sdc_rd | sdc_wr;
+assign sdc_rd[7:4] = 4'b0000;
+assign sdc_wr[7:4] = 4'b0000;   
+   
 sd_rw #(
     .CLK_DIV(3'd1),
     .SIMULATE(1'b1)
@@ -123,8 +123,8 @@ sd_rw #(
     .sddat_in(sddat_in),
 
     // user read sector command interface (sync with clk)
-    .rstart(sdc_rd[0]), 
-    .wstart(sdc_wr[0]), 
+    .rstart(|sdc_rd), 
+    .wstart(|sdc_wr), 
     .sector(sdc_lba),
     .rbusy(sdc_busy),
     .rdone(sdc_done),
@@ -168,9 +168,9 @@ macplus macplus (
         // interface to sd card
 	.sdc_image_size( image_size),
 	.sdc_image_mounted( image_mounted ),
-	.sdc_lba     ( sdc_lba     ),
-	.sdc_rd      ( sdc_rd[1:0] ),
-	.sdc_wr      ( sdc_wr[1:0] ),
+	.sdc_lba     ( sdc_lba[23:0] ),        // upper 8 bist are mapped to command bits
+	.sdc_rd      ( sdc_rd[3:0] ),
+	.sdc_wr      ( sdc_wr[3:0] ),
 	.sdc_busy    ( sdc_busy    ),
 	.sdc_done    ( sdc_done    ),
 	.sdc_data_in ( sdc_data_in ),
@@ -189,8 +189,7 @@ macplus macplus (
 	.sdram_ds(sdram_ds),
 	.sdram_we(sdram_we),
 	.sdram_oe(sdram_oe),
-//	.sdram_do(sdram_do),  // sdram_do (sim sram), sdram_dout = (sim sdram)
-	.sdram_do(sdram_dout),
+	.sdram_do(sdram_dout), // sdram_do (sim sram), sdram_dout = (sim sdram)
  
         .UART_CTS(),
         .UART_RTS(),

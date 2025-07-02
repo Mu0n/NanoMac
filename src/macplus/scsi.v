@@ -5,36 +5,36 @@
   
 module scsi
 (
-	input      clk,
+	input	      clk,
 
 	// scsi interface
-	input 	  rst, // bus reset from initiator
-	input 	  sel,
-	input 	  atn, // initiator requests to send a message
-	output 	  bsy, // target holds bus
+	input	      rst, // bus reset from initiator
+	input	      sel,
+	input	      atn, // initiator requests to send a message
+	output	      bsy, // target holds bus
 
-	output 	  msg,
-	output 	  cd,
-	output 	  io,
+	output	      msg,
+	output	      cd,
+	output	      io,
 
-	output 	  req,
-	input 	  ack, // initiator acknowledges a request
+	output	      req,
+	input	      ack, // initiator acknowledges a request
 
-	input   [7:0] din, // data from initiator to target
-	output  [7:0] dout, // data from target to initiator
+	input [7:0]   din, // data from initiator to target
+	output [7:0]  dout, // data from target to initiator
 
 	// interface to io controller
-	input         img_mounted,
-	input  [31:0] img_blocks,
+	input	      img_mounted,
+	input [31:0]  img_blocks,
 	output [31:0] io_lba,
-	output reg 	  io_rd,
-	output reg 	  io_wr,
-	input         io_ack,
+	output reg    io_rd,
+	output reg    io_wr,
+	input	      io_ack,
 
-	input   [7:0] sd_buff_addr,
-	input  [15:0] sd_buff_dout,
-	output [15:0] sd_buff_din,
-	input         sd_buff_wr
+	input [8:0]   sd_buff_addr,
+	input [7:0]   sd_buff_dout,
+	output [7:0]  sd_buff_din,
+	input	      sd_buff_wr
 );
 
 // SCSI device id
@@ -51,39 +51,6 @@ reg [2:0]  phase;
 // ------------ sector buffer IO controller read/write -----------------------
 // the buffer itself. Can hold two sectors
 reg sd_buff_sel;
-
-wire [7:0] buffer0_dout;
-scsi_dpram buffer0
-(
-	.clock(clk),
-
-	.address_a({sd_buff_sel, sd_buff_addr}),
-	.data_a(sd_buff_dout[7:0]),
-	.wren_a(sd_buff_wr),
-	.q_a(sd_buff_din[7:0]),
-
-	.address_b(data_cnt[9:1]),
-	.data_b(din),
-	.wren_b(buffer0_wr),
-	.q_b(buffer0_dout)
-);
-
-wire [7:0] buffer1_dout;
-scsi_dpram buffer1
-(
-	.clock(clk),
-
-	.address_a({sd_buff_sel, sd_buff_addr}),
-	.data_a(sd_buff_dout[15:8]),
-	.wren_a(sd_buff_wr),
-	.q_a(sd_buff_din[15:8]),
-
-	.address_b(data_cnt[9:1]),
-	.data_b(din),
-	.wren_b(buffer1_wr),
-	.q_b(buffer1_dout)
-);
-
 reg old_io_ack;
 always @(posedge clk) begin
 	old_io_ack <= io_ack;
@@ -92,6 +59,25 @@ always @(posedge clk) begin
 	else
 		if (old_io_ack & ~io_ack) sd_buff_sel <= !sd_buff_sel;
 end
+   
+// ------------ sector buffer IO controller read/write -----------------------
+
+reg buffer_wr;
+wire [7:0] buffer_dout;
+scsi_dpram #(.ADDRWIDTH(10)) buffer 
+(
+	.clock(clk),
+
+	.address_a({sd_buff_sel, sd_buff_addr}),
+	.data_a(sd_buff_dout),
+	.wren_a(sd_buff_wr),
+	.q_a(sd_buff_din),
+
+	.address_b(data_cnt[9:0]),
+	.data_b(din),
+	.wren_b(buffer_wr),
+	.q_b(buffer_dout)
+);
 
 // -----------------------------------------------------------
 
@@ -122,7 +108,7 @@ assign dout = (phase == PHASE_STATUS_OUT)?status:
 
 // de-multiplex different data sources
 wire [7:0] cmd_dout =
-		cmd_read?(data_cnt[0] ? buffer1_dout : buffer0_dout):
+		cmd_read?buffer_dout:
 		cmd_inquiry?inquiry_dout:
 		cmd_read_capacity?read_capacity_dout:
 		cmd_mode_sense?mode_sense_dout:
@@ -148,8 +134,6 @@ wire [7:0] inquiry_dout =
 		8'h00;
 
 // output of read capacity command
-//wire [31:0] capacity = 32'd41056;   // 40960 + 96 blocks = 20MB
-//wire [31:0] capacity = 32'd1024096;   // 1024000 + 96 blocks = 500MB
 reg [31:0] capacity;
 reg        mounted = 0;
 always @(posedge clk) begin
@@ -230,18 +214,12 @@ always @(posedge clk) begin
 	stb_adv <= (old_ack & ~ack); // on falling edge
 end
 
-reg buffer0_wr, buffer1_wr;
-
 // store data on rising edge of ack, ...
 always @(posedge clk) begin
-	buffer0_wr <= 0;
-	buffer1_wr <= 0;
+	buffer_wr <= 1'b0;
 	if(stb_ack) begin
 		if(phase == PHASE_CMD_IN)  cmd[cmd_cnt] <= din;
-		if(phase == PHASE_DATA_IN) begin
-			buffer0_wr <= ~data_cnt[0];
-			buffer1_wr <=  data_cnt[0];
-		end
+	        if(phase == PHASE_DATA_IN) buffer_wr <= 1'b1;
 	end
 end
 

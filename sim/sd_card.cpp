@@ -1,6 +1,12 @@
 /*
   sd_card.cpp
- */
+
+  The simulation does not include the FPGA Companion. There's thus
+  no instance that maps the different floppy/SCSI devices onto the
+  SD card. The simulation thus includes the target device into the
+  upper 8 bits of the LBA and this sd card simulation maps the
+  request onto the four images files based on that.
+*/
 
 #include <stdio.h>
 #include <ctype.h>
@@ -8,8 +14,14 @@
 
 #include "Vnanomac_tb.h"
 
-#define SD_CARD_IMG   "FloppyWrite.dsk"
-#define WRITE_BACK
+const char *file_image[] = {
+  NULL, // "../disks/system30_minimal_work.dsk", // internal floppy
+  NULL, // "../disks/HelloWorld.dsk",            // external floppy
+  "../disks/MacPack/boot.vhd",                  // SCSI HDD #1
+  NULL
+};
+  
+// #define WRITE_BACK
 
 // disable colorization for easier handling in editors 
 #if 1
@@ -28,9 +40,9 @@
 // <= 1000  ok
 // >= 5000 early write error -36 at ~15000 msec with FloppyWrite.dsk test
 // in between fails sometimes/later
-#define READ_BUSY_COUNT 5000
+#define READ_BUSY_COUNT 1000
 
-extern char *sector_string(uint32_t lba);
+extern char *sector_string(int drive, uint32_t lba);
 
 static void hexdump(void *data, int size) {
   int i, b2c;
@@ -175,13 +187,15 @@ static void update_crc(uint8_t *sector_data) {
 // total cid respose is 136 bits / 17 bytes
 unsigned char cid[17] = "\x3f" "\x02TMS" "A08G" "\x14\x39\x4a\x67" "\xc7\x00\xe4";
 
-static FILE *fd = NULL;
+static FILE *fd[4] = { NULL, NULL, NULL, NULL };
 
 void fdclose(void) {
-  if(fd) {
-    printf("closing sd card\n");
-    fclose(fd);
-    fd = NULL;
+  for(int i=0;i<4;i++) {  
+    if(fd[i]) {
+      printf("closing file image %d\n", i);
+      fclose(fd[i]);
+      fd[i] = NULL;
+    }
   }
 }
 
@@ -206,24 +220,30 @@ void sd_handle(float ms, Vnanomac_tb *tb)  {
   static int insert_counter = 0;
   static int size;
   
-  if(insert_counter < 2000) {
-    if(insert_counter == 800) {
-      fd = fopen(SD_CARD_IMG, "r+b");      
-      if(fd) {
-	atexit(fdclose);
-	
-	fseek(fd, 0, SEEK_END);
-	size = ftello(fd);
-	printf("%.3fms SDC mounting %s, size = %d\n", ms, SD_CARD_IMG, size);
-	fseek(fd, 0, SEEK_SET);
+  if(insert_counter < 4000) {
+    int drive = insert_counter/1000;
+    int cnt = insert_counter%1000;
+
+    if(insert_counter == 10)
+      atexit(fdclose);
+
+    if(cnt == 300) {
+      if(file_image[drive])
+	fd[drive] = fopen(file_image[drive], "r+b");
+      
+      if(fd[drive]) {	
+	fseek(fd[drive], 0, SEEK_END);
+	size = ftello(fd[drive]);
+	printf("%.3fms DRV %d mounting %s, size = %d\n", ms, drive, file_image[drive], size);
+	fseek(fd[drive], 0, SEEK_SET);
 	tb->image_size = size;
 	tb->sddat_in = 15;	    
       }
     }
     
-    if(fd) {	  
-      if( insert_counter == 850 ) tb->image_mounted = 1;
-      if( insert_counter == 860 ) tb->image_mounted = 0;
+    if(fd[drive]) {
+      if( cnt == 350 ) tb->image_mounted = 1<<drive;
+      if( cnt == 351 ) tb->image_mounted = 0;
     }
     
     insert_counter++;
@@ -273,13 +293,18 @@ void sd_handle(float ms, Vnanomac_tb *tb)  {
 	      printf(GREEN "CRC ok: "); hexdump(crc_rx, 8);
 	      printf("" END);
 	    }
-	    
-	    if(fd) {
+
+	    int i = dat_arg >> 24;
+	    int drive = 0;
+	    while(!(i&1)) { drive++; i>>=1; }
+	    int lba = dat_arg & 0xffffff;
+
+	    if(fd[drive]) {
 	      uint8_t ref[512];
 
 	      // read original sector for comparison
-	      fseek(fd, 512 * dat_arg, SEEK_SET);
-	      int items = fread(ref, 2, 256, fd);
+	      fseek(fd[drive], 512 * lba, SEEK_SET);
+	      int items = fread(ref, 2, 256, fd[drive]);
 	      if(items != 256) perror("fread()");
 
 	      hexdiff(sector_data, ref, 512);
@@ -287,8 +312,8 @@ void sd_handle(float ms, Vnanomac_tb *tb)  {
 	      hexdump(sector_data, 520);
 
 #ifdef WRITE_BACK
-	    fseek(fd, 512 * dat_arg, SEEK_SET);
-	    if(fwrite(sector_data, 2, 256, fd) != 256) {
+	    fseek(fd[drive], 512 * lba, SEEK_SET);
+	    if(fwrite(sector_data, 2, 256, fd[drive]) != 256) {
 	      printf("SDC WRITE ERROR\n");
 	      exit(-1);
 	    }	    
@@ -386,17 +411,23 @@ void sd_handle(float ms, Vnanomac_tb *tb)  {
             printf("%.3fms SDC: Set block len to %ld\n", ms, arg);
             cmd_out = reply(16, 0);    // ok
             break;
-          case 17:  // read block
-            printf("%.3fms SDC: Request to read single block %ld (%s)\n", ms, arg, sector_string(arg));
+          case 17: { // read block
+	    int i = arg >> 24;
+	    int drive = 0;
+	    while(!(i&1)) { drive++; i>>=1; }
+	    int lba = arg & 0xffffff;
+
+            printf("%.3fms SDC: Request #%d to read single block %d (%s)\n", ms,
+		   drive, lba, sector_string(drive, lba));
             cmd_out = reply(17, 0);    // ok
 
-	    if(fd) {
+	    if(fd[drive]) {
 	      // load sector
-	      fseek(fd, 512 * arg, SEEK_SET);
-	      int items = fread(sector_data, 2, 256, fd);
+	      fseek(fd[drive], 512 * lba, SEEK_SET);
+	      int items = fread(sector_data, 2, 256, fd[drive]);
 	      if(items != 256) perror("fread()");
 
-	      // hexdump(sector_data, 32);
+	      hexdump(sector_data, 32);
 	    } else {
 	      printf("%.3fms SDC: No image loaded, sending empty data\n", ms);
 	      memset(sector_data, 0, 512);
@@ -408,10 +439,15 @@ void sd_handle(float ms, Vnanomac_tb *tb)  {
             dat_bits = 128*8 + 16 + 1 + 1;
 
 	    read_busy = READ_BUSY_COUNT;  // some delay to simulate card actually doing some read
-	    break;
+	  } break;
             
-          case 24:  // write block
-            printf("%.3fms SDC: Request to write single block %ld (%s)\n", ms, arg, sector_string(arg));
+          case 24: {  // write block
+	    int i = arg >> 24;
+	    int drive = 0;
+	    while(!(i&1)) { drive++; i>>=1; }
+
+            printf("%.3fms SDC: Request #%d to write single block %ld (%s)\n", ms,
+		   drive, arg&0xffffff, sector_string(drive, arg&0xffffff));
             cmd_out = reply(24, 0);    // ok
 	    
 	    // prepare to receive data
@@ -420,7 +456,7 @@ void sd_handle(float ms, Vnanomac_tb *tb)  {
             dat_write = 1;
             dat_bits = 128*8 + 16 + 1 + 1 + 4;
 
-	    break;
+	  } break;
 
           default:
             printf("%.3fms SDC: unexpected command\n", ms);

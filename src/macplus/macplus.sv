@@ -22,76 +22,72 @@
 module macplus
 (
 	//Master input clock
-	input	      CLKIN,
+	input		       CLKIN,
 
 	//Async reset from top-level module.
 	//Can be used as initial reset.
-	input	      RESET,
+	input		       RESET,
 
-        output	      pixelOut,
-	output	      vsync,
-	output	      hsync,
+        // video and audio outputs
+        output		       pixelOut,
+	output		       vsync,
+	output		       hsync,
 
-	output [10:0] audio,
+	output [10:0]	       audio,
 
-	output [1:0]  leds,
+	output [1:0]	       leds,
 
 	//ADC
-	inout [3:0]   ADC_BUS,
+	inout [3:0]	       ADC_BUS,
 
         //MOUSE
-	input [5:0]   MOUSE,
-	input	      kbd_strobe,
-	input [9:0]   kbd_data,
+	input [5:0]	       MOUSE,
+	input		       kbd_strobe,
+	input [9:0]	       kbd_data,
 
         // set the real-world inputs to sane defaults
-	input	      configROMSize, // 64k or 128K ROM
-	input [1:0]   configRAMSize, // 128k, 512k, 1MB or 4MB
-	input	      configMachineType, // 0 = Plus, 1 = SE
-	input [1:0]   configFloppyWProt,
+	input		       configROMSize, // 64k or 128K ROM
+	input [1:0]	       configRAMSize, // 128k, 512k, 1MB or 4MB
+	input		       configMachineType, // 0 = Plus, 1 = SE
+	input [1:0]	       configFloppyWProt,
 			  
         // interface to sd card
-	input [31:0]  sdc_image_size,
-	input [1:0]   sdc_image_mounted,
-	output [10:0] sdc_lba,
-	output [1:0]  sdc_rd,
-	output [1:0]  sdc_wr,
-	input	      sdc_done,
-	input	      sdc_busy,
-	output [7:0]  sdc_data_out,
-	input [7:0]   sdc_data_in,
-	input	      sdc_data_en,
-	input [8:0]   sdc_addr,
+	input [31:0]	       sdc_image_size,
+	input [SCSI_DEVS+1:0]  sdc_image_mounted,
+	output [31:0]	       sdc_lba,
+	output [SCSI_DEVS+1:0] sdc_rd,
+	output [SCSI_DEVS+1:0] sdc_wr,
+	input		       sdc_done,
+	input		       sdc_busy,
+	output [7:0]	       sdc_data_out,
+	input [7:0]	       sdc_data_in,
+	input		       sdc_data_en,
+	input [8:0]	       sdc_addr,
 
-	input	      UART_CTS,
-	output	      UART_RTS,
-	input	      UART_RXD,
-	output	      UART_TXD,
-	output	      UART_DTR,
-	input	      UART_DSR,
+	input		       UART_CTS,
+	output		       UART_RTS,
+	input		       UART_RXD,
+	output		       UART_TXD,
+	output		       UART_DTR,
+	input		       UART_DSR,
 
         // interface to toplevel rom
-	output	      _romOE,
-        output [17:0] romAddr, 
-        input [15:0]  romData, 
+	output		       _romOE,
+        output [17:0]	       romAddr, 
+        input [15:0]	       romData, 
 
-	output [2:0]  busPhase, // used to synchronize ram state machine
+	output [2:0]	       busPhase, // used to synchronize ram state machine
   
         // interface to (sd)ram
-	output [20:0] ram_addr,
-	output [15:0] sdram_din,
-	output [1:0]  sdram_ds,
-	output	      sdram_we,
-	output	      sdram_oe,
-	input [15:0]  sdram_do
+	output [20:0]	       ram_addr,
+	output [15:0]	       sdram_din,
+	output [1:0]	       sdram_ds,
+	output		       sdram_we,
+	output		       sdram_oe,
+	input [15:0]	       sdram_do
 );
 
 assign ADC_BUS  = 'Z;
-
-// floppy disk interface
-wire [1:0]	      diskLED;
-   
-assign leds = diskLED;
 
 ////////////////////   CLOCKS   ///////////////////
 
@@ -141,17 +137,6 @@ localparam SCSI_DEVS = 2;
 
 // the status register is controlled by the on screen display (OSD)
 wire  [1:0] buttons;
-wire [31:0] sd_lba[SCSI_DEVS];
-wire  [SCSI_DEVS-1:0] sd_rd;
-wire  [SCSI_DEVS-1:0] sd_wr;
-wire  [SCSI_DEVS-1:0] sd_ack;
-wire            [7:0] sd_buff_addr;
-wire           [15:0] sd_buff_dout;
-wire           [15:0] sd_buff_din[SCSI_DEVS];
-wire                  sd_buff_wr;
-wire  [SCSI_DEVS-1:0] img_mounted;
-wire           [63:0] img_size;
-
 wire [32:0] TIMESTAMP;
 
 //
@@ -382,20 +367,7 @@ dataController #(SCSI_DEVS) dc0
 	.loadSound(loadSound),
 
 	// floppy disk interface
-	.diskLED(diskLED),
-
-	// block device interface for scsi disk
-	.img_mounted(img_mounted),
-	.img_size(img_size[40:9]),
-	.io_lba(sd_lba),
-	.io_rd(sd_rd),
-	.io_wr(sd_wr),
-	.io_ack(sd_ack),
-
-	.sd_buff_addr(sd_buff_addr),
-	.sd_buff_dout(sd_buff_dout),
-	.sd_buff_din(sd_buff_din),
-	.sd_buff_wr(sd_buff_wr)
+	.diskLED(leds)
 );
 
 ////////////////////////// SDRAM /////////////////////////////////

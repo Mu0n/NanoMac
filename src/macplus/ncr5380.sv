@@ -69,9 +69,9 @@ module ncr5380
 	output [DEVS-1:0] io_wr,
 	input  [DEVS-1:0] io_ack,
 
-	input        [7:0] sd_buff_addr,
-	input       [15:0] sd_buff_dout,
-	output      [15:0] sd_buff_din[DEVS],
+	input        [8:0] sd_buff_addr,
+	input        [7:0] sd_buff_dout,
+	output       [7:0] sd_buff_din[DEVS],
 	input              sd_buff_wr
 );
 	parameter DEVS = 2;
@@ -233,7 +233,7 @@ module ncr5380
 	/* Mux target signals */
 	reg scsi_cd, scsi_io, scsi_msg, scsi_req;
 
-	always begin
+	always @* begin
 		integer i;
 		scsi_cd = 0;
 		scsi_io = 0;
