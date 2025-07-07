@@ -71,14 +71,14 @@ module dataController (
 	// misc
 	output		       memoryOverlayOn,
 
-	output [1:0]	       diskLED,
+	output [3:0]	       diskLED,
 		       
         // sd card interface
 	input [31:0]	       sdc_img_size,
 	input [SCSI_DEVS+1:0]  sdc_img_mounted,
 	output [31:0]	       sdc_lba,
-	output [SCSI_DEVS+1:0] sdc_rd,
-	output [SCSI_DEVS+1:0] sdc_wr,
+	output reg [SCSI_DEVS+1:0] sdc_rd,
+	output reg [SCSI_DEVS+1:0] sdc_wr,
 	input		       sdc_done,
 	input		       sdc_busy,
 	input [7:0]	       sdc_data_in,
@@ -90,32 +90,54 @@ module dataController (
 	parameter SCSI_DEVS = 2;
 
         // ---------- demux between iwm and scsi depending on request -------------
-        reg  scsi_io = 1'b0;    // toggle between scsi and iwm
+        reg [15:0] scsiLED_cnt [2];   
+        assign diskLED[3:2] = { scsiLED_cnt[1] != 0, scsiLED_cnt[0] != 0 };
+   
+        reg  scsi_io = 1'b1;    // toggle between scsi and iwm
         reg  scsi_dev = 1'b0;   // toggle between scsi 0/1
 
+        wire [1:0] iwm_rd, iwm_wr;
+        wire [1:0] scsi_rd, scsi_wr;
+   
+        // lba needs to come before sdc_rd and sdc_wr. Since their
+        // sources are used to mux xx_lba, they need to delayed when
+        // being assembled into sdc_rd/wr
         always @(posedge clk) begin
-             if(selectIWM)  scsi_io <= 1'b0;
-             if(selectSCSI) scsi_io <= 1'b1;
+	   if(scsi_rd[0] || scsi_wr[0]) scsiLED_cnt[0] <= 16'hffff;
+	   else if(scsiLED_cnt[0]) scsiLED_cnt[0] <= scsiLED_cnt[0] - 16'd1;
+	   
+	   if(scsi_rd[1] || scsi_wr[1]) scsiLED_cnt[1] <= 16'hffff; 
+	   else if(scsiLED_cnt[1]) scsiLED_cnt[1] <= scsiLED_cnt[1] - 16'd1;
+	   
+	   sdc_rd <= { scsi_rd, iwm_rd };
+	   sdc_wr <= { scsi_wr, iwm_wr };
 
-	     if(sdc_rd[3] | sdc_wr[3]) scsi_dev <= 1'b1;	   
-	     if(sdc_rd[2] | sdc_wr[2]) scsi_dev <= 1'b0;	   
+	   // any iwm/floppy access disables data path to/from scsi
+	   if(|{iwm_rd,iwm_wr})   scsi_io <= 1'b0;
+	   // any scsi access enables data path to/from scsi
+	   if(|{scsi_rd,scsi_wr}) scsi_io <= 1'b1;
+
+	   // access to scsi #1 enables data path to/from scsi #1
+           if(scsi_rd[1] | scsi_wr[1]) scsi_dev <= 1'b1;	   
+	   // access to scsi #0 enables data path to/from scsi #0
+	   if(scsi_rd[0] | scsi_wr[0]) scsi_dev <= 1'b0;	   
         end
 
+        // direct the sd busy signal to the appropriate scsi target
         wire [1:0] io_ack = 
 		   (scsi_io && !scsi_dev)?{1'b0, sdc_busy}:
 		   (scsi_io &&  scsi_dev)?{sdc_busy, 1'b0}:
 		   2'b00;
    
-        wire [7:0]	  scsi_data_out[SCSI_DEVS];
-        wire [7:0]	  iwm_data_out;
+        wire [7:0] scsi_data_out[SCSI_DEVS];
+        wire [7:0] iwm_data_out;
         assign sdc_data_out = scsi_io?scsi_data_out[scsi_dev]:iwm_data_out;
    
         // demux requests from iwm and scsi
         wire [10:0] iwm_lba;
         wire [31:0] scsi_lba[SCSI_DEVS];
         assign sdc_lba = 
-                    (scsi_io && (sdc_rd[3]|sdc_wr[3]))?scsi_lba[1]:
-		    (scsi_io && (sdc_rd[2]|sdc_wr[2]))?scsi_lba[0]:
+		    scsi_io?scsi_lba[scsi_dev]:
 		    { 21'd0, iwm_lba };   
    
 	// add binary volume levels according to volume setting
@@ -177,7 +199,6 @@ module dataController (
 		!_sccIrq?3'b101:
 		3'b111;
 		
-
 	// CPU-side data output mux
 	assign cpuDataOut = selectIWM ? iwmDataOut :
 			    selectVIA ? viaDataOut :
@@ -205,8 +226,8 @@ module dataController (
 		.img_mounted( sdc_img_mounted[SCSI_DEVS+1:2] ),
 		.img_size( { 9'd0, sdc_img_size[31:9] } ),   // size of 512byte blocks
 		.io_lba ( scsi_lba ),
-		.io_rd ( sdc_rd[3:2] ),  // TODO: enabling both breaks floppy (and scsi) on FPGA
-		.io_wr ( sdc_wr[3:2] /*sdc_wr[SCSI_DEVS+1:2]*/ ),   // -"-
+		.io_rd ( scsi_rd ),
+		.io_wr ( scsi_wr ),
 		.io_ack ( io_ack ),
 
 		.sd_buff_addr(sdc_addr),
@@ -448,14 +469,14 @@ module dataController (
 		.driveSel(driveSel),
 	        .diskWProt(floppy_wprot),
 		.dataOut(iwmDataOut),
-		.diskLED(diskLED),
+		.diskLED(diskLED[1:0]),
 	      
                 // interface to sd card
 	        .sd_img_size     ( sdc_img_size    ),
 	        .sd_img_mounted    ( sdc_img_mounted[1:0] ),
-	        .sd_lba     ( iwm_lba ),
-	        .sd_rd      ( sdc_rd[1:0] ),
-	        .sd_wr      ( sdc_wr[1:0] ),
+	        .sd_lba     ( iwm_lba     ),
+	        .sd_rd      ( iwm_rd      ),
+	        .sd_wr      ( iwm_wr      ),
 	        .sd_busy    ( sdc_busy    ),
 	        .sd_done    ( sdc_done    ),
 	        .sd_data_in ( sdc_data_in ),

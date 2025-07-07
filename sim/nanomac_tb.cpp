@@ -21,7 +21,7 @@ extern void sd_handle(float ms, Vnanomac_tb *tb);
 
 #define ROM "plusrom.bin"
 
-#define RAM_SIZE 1    // 0=128k, 1=512k, 2=1MB, 3=4MB
+#define RAM_SIZE 2    // 0=128k, 1=512k, 2=1MB, 3=4MB
 
 #define TICKLEN   (0.5/16000000)
 
@@ -343,6 +343,13 @@ void load_rom(void) {
   int len = fread(rom, 1024, 128, fd);
   if(len != 128) { printf("read failed\n"); exit(-1); }
   fclose(fd);
+
+#if 0
+  // we may actually patch some stuff for faster booting
+  rom[0xd7a/2] = SWAP16(0x6022);  // 7000, disable rom checksum test
+  rom[0xea8/2] = SWAP16(0x4e71);  // 6EEC, shorten ram test read
+  rom[0xe90/2] = SWAP16(0x4e71);  // 6AF0, shorten ram test write
+#endif
 }
 
 // "normal" ram, basically sram like

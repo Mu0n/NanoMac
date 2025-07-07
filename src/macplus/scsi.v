@@ -130,7 +130,7 @@ wire [7:0] inquiry_dout =
 
 		(data_cnt == 32'd26)?"S":(data_cnt == 32'd27)?"T":
 		(data_cnt == 32'd28)?"2":(data_cnt == 32'd29)?"2":
-		(data_cnt == 32'd30)?"5":(data_cnt == 32'd31)?"N" + {5'd0, ID}: // TESTING. ElectronAsh.
+		(data_cnt == 32'd30)?"5":(data_cnt == 32'd31)?"N":
 		8'h00;
 
 // output of read capacity command
@@ -193,11 +193,13 @@ always @(posedge clk) begin
 		io_wr <= 1'b0;
 	end else begin
 		if (rd_pending && !io_rd) begin
+			$display("Target %d read %d", ID, lba);
 			io_rd <= 1;
 			rd_pending <= 0;
 		end
 
 		if (wr_pending && !io_wr) begin
+			$display("Target %d write %d", ID, lba);
 			io_wr <= 1;
 			wr_pending <= 0;
 		end

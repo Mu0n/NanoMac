@@ -463,7 +463,7 @@ macplus macplus (
     .sdc_data_en ( sdc_data_read_en ),
     .sdc_addr    ( sdc_addr         ),
  
-    .leds( leds[1:0] ),
+    .leds( leds[3:0] ),
 
 	.MOUSE(mouse), // 1 button, 4 encoder
     .kbd_strobe(kbd_strobe),
@@ -494,7 +494,7 @@ macplus macplus (
 );
 
 wire [5:0] leds;
-assign leds[5:2] = 4'b0000;
+assign leds[5:4] = 2'b00;
 assign leds_n = ~leds;   
 					
 /* -------------------- HDMI video and audio -------------------- */

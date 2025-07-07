@@ -17,7 +17,7 @@
 const char *file_image[] = {
   NULL, // "../disks/system30_minimal_work.dsk", // internal floppy
   NULL, // "../disks/HelloWorld.dsk",            // external floppy
-  "../disks/MacPack/boot.vhd",                  // SCSI HDD #1
+  "./boot_work.vhd",                  // SCSI HDD #1
   NULL
 };
   
@@ -317,7 +317,7 @@ void sd_handle(float ms, Vnanomac_tb *tb)  {
 	      printf("SDC WRITE ERROR\n");
 	      exit(-1);
 	    }	    
-	    fflush(fd);
+	    fflush(fd[drive]);
 #endif
 	    dat_bits--;
 	  }
