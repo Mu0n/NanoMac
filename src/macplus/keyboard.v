@@ -124,14 +124,29 @@ always @(posedge clk or posedge reset) begin
 end
 
 /* incoming data is valid on the changing edge of strobe */   
+reg caps = 1'b0;
 always @(posedge clk) begin
    reg strobe;
       
    if(en) begin
       got_key <= 1'b0;	 
       if(kbd_strobe != strobe) begin
-	 keymac <= kbd_data;
-	 got_key <= 1'b1;	    
+
+	 // caps lock needs some special treatment as the mac expects
+	 // a single up or down event per full key stroke. Basically as
+	 // if the key was a physical toggle switch
+
+	 // totally ignore the incoming caps release event
+	 if(kbd_data != 10'hf3) begin
+	    // caps press event
+	    if(kbd_data == 10'h73) begin
+	       keymac <= { kbd_data[9:8], caps, kbd_data[6:0] };
+	       caps <= !caps;	       
+	    end else
+	      keymac <= kbd_data;
+	    
+	    got_key <= 1'b1;
+	 end
       end
       
       strobe <= kbd_strobe;	 
