@@ -129,6 +129,7 @@ wire [9:0] soff =
 reg [7:0]  track_in_buffer;         // track currently stored in buffer (drive/side/track)
 reg [7:0]  track_buffer [24*512];   // max 12 sectors per track and side
 reg [23:0] track_buffer_dirty;      // sectors have been written
+reg [23:0] track_buffer_timeout;    // time until dirty buffer is flashed
 reg [4:0]  track_loader_sector;     // sector 0..23 within track currently being read
 reg [7:0]  track_loader_state;
 reg [7:0]  track_in_progress;
@@ -201,12 +202,18 @@ always @(posedge clk) begin
       sd_rd <= 2'b00;
       sd_wr <= 2'b00;
       track_buffer_dirty <= 24'h000000;      
+      track_buffer_timeout <= 24'd0;      
    end else begin
       writeStrobeD <= writeStrobe;      
       
+      // decrease track buffer timeout
+      if (track_buffer_dirty && track_buffer_timeout)
+	track_buffer_timeout <= track_buffer_timeout - 24'd1;
+      
       case(track_loader_state)
 	// idle state
-	0: if(!ready && !sd_busy && (size[drive] != 32'd0)) begin
+	// track_buffer_timeout <= 24'd0;      
+	0: if((!ready || (track_buffer_timeout == 0) && track_buffer_dirty) && !sd_busy && (size[drive] != 32'd0)) begin
 	   // the wrong track is in buffer, there's a disk in the requested drive
 	   // and the sd card is not busy -> load the right track, but flush any
 	   // dirty sectors before
@@ -258,6 +265,7 @@ always @(posedge clk) begin
 	   if( writeStrobe ^ writeStrobeD ) begin
 	      logic [4:0] wr_sector = {1'b0,writeSector}+(side?{1'b0,spt}:5'd0);
 	      track_buffer_dirty[wr_sector] <= 1'b1;	      
+	      track_buffer_timeout <= 24'd8000000;      
 	      track_buffer[{wr_sector, writeAddr}] <= writeDataDecoded;
 	   end
 	end
@@ -324,6 +332,7 @@ always @(posedge clk) begin
 	6: if(!sd_busy) begin
 	   // buffer for this sector not dirty, anymore
 	   track_buffer_dirty[track_sector_to_write] <= 1'b0;
+	   track_buffer_timeout <= 24'd0;      
 	   track_loader_state <= 8'd0;
 	end 
 	
