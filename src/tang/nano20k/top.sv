@@ -77,6 +77,7 @@ wire       osd_reset;
 wire       osd_widescreen;      // 0=normal, 1=wide   
 wire [1:0] osd_memory;          // 0=128k, 1=512k, 2=1M, 3=4M
 wire [1:0] osd_floppy_wprot;    // 0=int, 1=ext
+wire       osd_hdd_wprot;       // 0=rw, 1=ro
 
 // busphase 0..7 of mac. Used to synchronize sdram to video and cpu
 wire [2:0] phase;
@@ -197,6 +198,7 @@ sysctrl sysctrl (
         .system_widescreen(osd_widescreen),
         .system_memory(osd_memory),
 		.system_floppy_wprot(osd_floppy_wprot),
+		.system_hdd_wprot(osd_hdd_wprot),
                                  
         .int_out_n(m0s[4]),
         .int_in( { 4'b0000, sdc_int, 1'b0, hid_int, 1'b0 }),
@@ -449,6 +451,7 @@ macplus macplus (
 	.configRAMSize(osd_memory), // 128k, 512k, 1MB or 4MB
 	.configMachineType(1'b0),   // Plus, SE
     .configFloppyWProt(osd_floppy_wprot), // floppy disk write protections
+    .configSCSIWProt(osd_hdd_wprot), // hdd/scsi disk write protection
  
     // interface to sd card
     .sdc_image_size ( sdc_image_size ),

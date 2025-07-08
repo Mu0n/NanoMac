@@ -78,6 +78,8 @@ reg [8:0]  mcu_tx_cnt;
 // only export outen if the resulting data is for the core
 wire louten;  
 
+reg [2:0] state; 
+
 // drive outen only if the core reads data for itself
 assign outen = (state == CORE_IO && rstart_int)?louten:1'b0;   
    
@@ -90,7 +92,6 @@ localparam [2:0] IDLE         = 3'd0,
                  MCU_WRITE_RX = 3'd4,   // receive from MCU for write
                  CORE_IO      = 3'd5;   // core itself does SD card IO
 
-reg [2:0] state; 
 wire [7:0] inbyte_int;  
 
 // interrupt handling
@@ -98,6 +99,23 @@ wire rstart_any = {|{rstart}};
 wire wstart_any = {|{wstart}};
 wire start_any = rstart_any || wstart_any;
 
+// drive index for the current request
+wire [2:0] drive =
+		   (rstart[0] || wstart[0])?3'd0:
+		   (rstart[1] || wstart[1])?3'd1:
+		   (rstart[2] || wstart[2])?3'd2:
+		   (rstart[3] || wstart[3])?3'd3:
+		   (rstart[4] || wstart[4])?3'd4:
+		   (rstart[5] || wstart[5])?3'd5:
+		   (rstart[6] || wstart[6])?3'd6:
+		   3'd7;   
+
+// The MCU may allow for direct SD card access if the image is
+// continous (not fragmeneted) on card. In that case only the
+// start sector has to be known.
+reg [31:0] direct_start [8];   
+wire direct_enable = direct_start[drive] != 32'd0;   
+   
 wire [7:0] doutb;
 reg  dinb_we;
 
@@ -137,7 +155,7 @@ sector_dpram buffer(
     .doutb(doutb)					
 );
 `endif
-   
+
 always @(posedge clk) begin
    reg	  startD;   
    
@@ -146,9 +164,14 @@ always @(posedge clk) begin
       startD <= 1'b0;
    end else begin
       startD <= start_any;
+
+	  // Raising edge of start_any means that the core
+	  // is requesting a sector read or write. If the requesting
+	  // device is not enabled for direct io, then the MCU needs
+	  // to be triggered for sector translation.
 	  
-      // rising edge of rstart_any raises interrupt
-      if(start_any && !startD)
+      // rising edge of start_any raises interrupt
+      if(start_any && !startD && !direct_enable)
         irq <= 1'b1;
 	  
       // iack clears interrupt
@@ -188,6 +211,17 @@ always @(posedge clk) begin
 			state <= MCU_WRITE_SD;
 		 end
 	  end
+
+	  // If the core requests IO and direct access is enabled, then
+	  // don't wait for the MCU. Instead the sector to be read from SD card
+	  // is a direct offset of the requested sector relative from the
+	  // start of the image on card.
+      if(start_any && direct_enable && !rbusy) begin
+         lsector <= direct_start[drive] + rsector;
+		 if(rstart_any) rstart_int <= 1'b1;
+		 if(wstart_any) wstart_int <= 1'b1;		 
+		 state <= CORE_IO;		 
+	  end
 	  
       if(data_strobe) begin
          if(data_start) begin
@@ -204,13 +238,15 @@ always @(posedge clk) begin
 			if(command == 8'd1) begin
                // request status byte, for the MCU it doesn't matter whether
 			   // the core wants to write or to read
-			   if(byte_cnt == 4'd0) data_out <= rstart | wstart;
+
+			   // only forward request if direct_enable has not been enabled by MCU
+			   if(byte_cnt == 4'd0) data_out <= direct_enable?8'h00:(rstart | wstart);
 			   if(byte_cnt == 4'd1) data_out <= rsector[31:24];
 			   if(byte_cnt == 4'd2) data_out <= rsector[23:16];
 			   if(byte_cnt == 4'd3) data_out <= rsector[15: 8];
 			   if(byte_cnt == 4'd4) data_out <= rsector[ 7: 0];
 			end
-			
+
 			// SDC CMD 2: CORE_RW, CMD 3: MCU_READ
 			if(command == 8'd2 || command == 8'd3) begin
                // inform MCU about read state once command has
@@ -261,8 +297,10 @@ always @(posedge clk) begin
 			   if(byte_cnt == 4'd3) image_size[15:8]  <= data_in;
 			   if(byte_cnt == 4'd4) begin 
 				  image_size[7:0]   <= data_in;
-				  if(image_target <= 8'd7)  // images 0..7 are supported
-					image_mounted[image_target] <= 1'b1;
+				  if(image_target <= 8'd7) begin  // images 0..7 are supported
+					 direct_start[image_target] <= 32'd0;
+					 image_mounted[image_target] <= 1'b1;
+				  end
 			   end
 			end
 			
@@ -293,6 +331,19 @@ always @(posedge clk) begin
 			   end
 			end
 			
+			// SDC CMD 6: ENABLE DIRECT ACCESS
+			if(command == 8'd6) begin
+			   reg [24:0] ds;
+			   
+			   // MCU reports that the core may access the image
+			   // directy without sector translation
+			   if(byte_cnt == 4'd0) image_target <= data_in;
+               if(byte_cnt == 4'd1) ds[23:16] <= data_in;
+               if(byte_cnt == 4'd2) ds[15: 8] <= data_in;
+               if(byte_cnt == 4'd3) ds[ 7: 0] <= data_in;
+               if(byte_cnt == 4'd4) direct_start[image_target] <= { ds, data_in };
+			end
+   
 			if(byte_cnt != 4'd15) byte_cnt <= byte_cnt + 4'd1;    
          end
       end

@@ -37,10 +37,10 @@ extern void sd_handle(float ms, Vnanomac_tb *tb);
 // #define TRACESTART 5.1   // Sony write called
 // #define TRACESTART 20.0   // 128k / system 3.0 desktop reached
 
-// #define TRACESTART 4.85
+#define TRACESTART 25.5
 
 #ifdef TRACESTART
-#define TRACEEND     (TRACESTART + 0.2)
+#define TRACEEND     (TRACESTART + 0.5)
 #endif
 
 // floppy disk lba to side/track/sector translation table

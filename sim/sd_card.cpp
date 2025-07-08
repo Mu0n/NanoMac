@@ -15,9 +15,10 @@
 #include "Vnanomac_tb.h"
 
 const char *file_image[] = {
-  NULL, // "../disks/system30_minimal_work.dsk", // internal floppy
+  "./FloppyWrite.dsk", // internal floppy
+  // NULL, // "../disks/system30_minimal_work.dsk", // internal floppy
   NULL, // "../disks/HelloWorld.dsk",            // external floppy
-  "./boot_work.vhd",                  // SCSI HDD #1
+  NULL, // "./boot_work.vhd",                  // SCSI HDD #1
   NULL
 };
   

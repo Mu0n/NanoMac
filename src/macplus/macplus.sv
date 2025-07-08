@@ -50,6 +50,7 @@ module macplus
 	input [1:0]	       configRAMSize, // 128k, 512k, 1MB or 4MB
 	input		       configMachineType, // 0 = Plus, 1 = SE
 	input [1:0]	       configFloppyWProt,
+	input		       configSCSIWProt,
 			  
         // interface to sd card
 	input [31:0]	       sdc_image_size,
@@ -301,6 +302,7 @@ dataController #(SCSI_DEVS) dc0
 	.E_falling(E_falling),
 	.machineType(configMachineType),
 	.floppy_wprot(configFloppyWProt),
+	.scsi_wprot(configSCSIWProt),
 	._systemReset(n_reset),
 	._cpuReset(_cpuReset), 
 	._cpuIPL(_cpuIPL),

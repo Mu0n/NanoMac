@@ -10,6 +10,7 @@ module dataController (
 	input		       machineType, // 0 - Mac Plus, 1 - Mac SE
 	input		       _systemReset,
 	input [1:0]	       floppy_wprot,
+	input 	               scsi_wprot,
 
 	// 68000 CPU control:
 	output		       _cpuReset,
@@ -210,6 +211,15 @@ module dataController (
 	// Memory-side
 	assign memoryDataOut = cpuDataIn;
 
+        wire [1:0] scsi_wr_int;
+        wire [1:0] scsi_ack;
+
+        // forward write request only if writes are allowed
+        assign scsi_wr = scsi_wprot?2'b00:scsi_wr_int;
+   
+        // directly acknowledge any wriote request if no writes allowed
+        assign scsi_ack = scsi_wprot?(io_ack|scsi_wr_int):io_ack;   
+   
 	// SCSI
 	ncr5380 #(SCSI_DEVS) scsi(
 		.clk(clk),
@@ -225,10 +235,11 @@ module dataController (
 		// connections to io controller
 		.img_mounted( sdc_img_mounted[SCSI_DEVS+1:2] ),
 		.img_size( { 9'd0, sdc_img_size[31:9] } ),   // size of 512byte blocks
+		.wr_prot( scsi_wprot ),
 		.io_lba ( scsi_lba ),
 		.io_rd ( scsi_rd ),
-		.io_wr ( scsi_wr ),
-		.io_ack ( io_ack ),
+		.io_wr ( scsi_wr_int ),
+		.io_ack ( scsi_ack ),
 
 		.sd_buff_addr(sdc_addr),
 		.sd_buff_dout(sdc_data_in),
@@ -492,8 +503,6 @@ module dataController (
 		.cen(clk8_en_n),
 		.reset_hw(~_cpuReset),
 		.cs(selectSCC && (_cpuLDS == 1'b0 || _cpuUDS == 1'b0)),
-//		.cs(selectSCC && (_cpuLDS == 1'b0 || _cpuUDS == 1'b0) && cpuBusControl),
-//		.we(!_cpuRW),
 		.we(!_cpuLDS),
 		.rs(cpuAddrRegLo), 
 		.wdata(cpuDataIn[15:8]),

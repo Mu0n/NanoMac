@@ -27,7 +27,8 @@ module sysctrl (
   output  	    system_reset,
   output reg 	    system_widescreen,
   output reg [1:0]  system_memory,
-  output reg [1:0]  system_floppy_wprot
+  output reg [1:0]  system_floppy_wprot,
+  output reg        system_hdd_wprot
 );
 
 reg [3:0] state;
@@ -89,6 +90,7 @@ always @(posedge clk) begin
       system_widescreen <= 1'b0;           // normal screen by default      
       system_memory <= 2'd0;               // 128k TODO: 1M
       system_floppy_wprot <= 2'b11;        // both disks write protected
+      system_hdd_wprot <= 1'b1;            // SCSI write protected
    end else begin // if (reset)
       //  bring button state into local clock domain
       buttonsD <= buttons;
@@ -178,6 +180,8 @@ always @(posedge clk) begin
 		   if(id == "W") system_floppy_wprot <= data_in[1:0];
 		   // Value "X": Normal(0) or Wide(1) screen
 		   if(id == "X") system_widescreen <= data_in[0];
+		   // Value "S": HDD write protect enabled
+		   if(id == "S") system_hdd_wprot <= data_in[0];
                 end
             end
 

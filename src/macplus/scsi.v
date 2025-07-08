@@ -26,6 +26,7 @@ module scsi
 	// interface to io controller
 	input	      img_mounted,
 	input [31:0]  img_blocks,
+        input         wr_prot,
 	output [31:0] io_lba,
 	output reg    io_rd,
 	output reg    io_wr,
@@ -156,7 +157,8 @@ wire [7:0] read_capacity_dout =
 		8'h00;
 
 wire [7:0] mode_sense_dout =
-		(data_cnt == 32'd3 )?8'd8:
+		(data_cnt == 32'd2 )?{wr_prot,7'h00}:  // write protect bit
+		(data_cnt == 32'd3 )?8'd8:             // block descriptor length
 		(data_cnt == 32'd5 )?capacity[23:16]:
 		(data_cnt == 32'd6 )?capacity[15:8]:
 		(data_cnt == 32'd7 )?capacity[7:0]:
@@ -289,7 +291,7 @@ wire       cmd10_cpl = ((cmd_group == 3'b010) || (cmd_group == 3'b001)) && (cmd_
 wire       cmd_read = cmd_read6 || cmd_read10;
 wire       cmd_read6 = (op_code == 8'h08);
 wire       cmd_read10 = (op_code == 8'h28);
-wire       cmd_write = cmd_write6 || cmd_write10;
+wire       cmd_write = (cmd_write6 || cmd_write10) /* && !wr_prot */;  // TODO: Check why this makes the Mac hang
 wire       cmd_write6 = (op_code == 8'h0a);
 wire       cmd_write10 = (op_code == 8'h2a);
 wire       cmd_inquiry = (op_code == 8'h12);
