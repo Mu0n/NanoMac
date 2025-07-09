@@ -35,7 +35,7 @@ reg [1:0] mouse_y;
 
 assign mouse = { ~mouse_btn, mouse_x, mouse_y };
 
-reg [12:0] mouse_div;
+reg [11:0] mouse_div;
 reg [7:0] mouse_x_cnt;
 reg [7:0] mouse_y_cnt;
 
@@ -63,7 +63,7 @@ assign kbd_data = { macplus_keycode[8:7], kbd_data_in[7], macplus_keycode[6:0] }
 always @(posedge clk) begin
    if(reset) begin
       state <= 4'd0;
-      mouse_div <= 13'd0;
+      mouse_div <= 12'd0;
       irq <= 1'b0;
       irq_enable <= 1'b0;
       kbd_strobe <= 1'b0;
@@ -137,8 +137,8 @@ always @(posedge clk) begin
 
         end
       end else begin // if (data_in_strobe)
-        mouse_div <= mouse_div + 13'd1;      
-        if(mouse_div == 13'd0) begin
+        mouse_div <= mouse_div + 12'd1;      
+        if(mouse_div == 12'd0) begin
             if(mouse_x_cnt != 8'd0) begin
                 if(mouse_x_cnt[7]) begin
                     mouse_x_cnt <= mouse_x_cnt + 8'd1;
