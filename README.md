@@ -20,14 +20,15 @@ Current state:
   * HDMI video using the original 512x342p@60Hz mode
   * Keyboard and Mouse via USB
   * [Fully simulated](sim)
+  * Two SCSI harddisks
 
 Planned features:
-  * More code cleanups
-  * Enable SCSI support
+  * Serial/WiFi modem support
 
 ## Videos
 
-  * [NanoMac #2: Mac Plus on a tiny FPGA](https://www.youtube.com/watch?v=Lqf23NVxUAg)
+  * [NanoMac #3: Arkanoid on FPGA Apple Mac Plus](https://www.youtube.com/shorts/oIGm2tQEABU)
+  * [NanoMac #2: Mac Plus on a tiny FPGA](https://www.youtube.com/shorts/Lqf23NVxUAg)
   * [NanoMac #1: First boot of Apple Mac Plus on Tang Nano 20k](https://www.youtube.com/shorts/wxhe5facZ5A)
 
 ## What's needed?
@@ -41,3 +42,4 @@ Planned features:
      * Attached via breadboard or e.g. through a [custom carrier board](https://github.com/harbaum/MiSTeryNano/tree/main/board/misteryshield20k_lite)
      * Running the [FPGA Companion firmware](http://github.com/harbaum/FPGA-Companion)
   * At least one disk image in ```DSK``` format (819200 bytes in in size) containing e.g. [System 3.0](https://winworldpc.com/product/mac-os-0-6/system-3x) has to be placed on an SD card
+  * Optionally add a SCSI harddisk image like [MacPack's boot.vhd](https://archive.org/details/macpack)
