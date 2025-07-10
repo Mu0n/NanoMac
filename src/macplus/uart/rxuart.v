@@ -89,8 +89,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
 //
-`default_nettype	none
-//
 // States: (@ baud counter == 0)
 //	0	First bit arrives
 //	..7	Bits arrive
@@ -117,21 +115,20 @@
 `define	RXU_RESET_IDLE		4'he
 `define	RXU_IDLE		4'hf
 
-module rxuart(i_clk, i_reset, i_setup, i_uart_rx, o_wr, o_data, o_break,
-			o_parity_err, o_frame_err, o_ck_uart);
-	parameter [30:0] INITIAL_SETUP = 31'd868;
-	// 8 data bits, no parity, (at least 1) stop bit
-	input	wire		i_clk, i_reset;
-	/* verilator lint_off UNUSED */
-	input	wire	[30:0]	i_setup;
-	/* verilator lint_on UNUSED */
-	input	wire		i_uart_rx;
-	output	reg		o_wr;
-	output	reg	[7:0]	o_data;
-	output	reg		o_break;
-	output	reg		o_parity_err, o_frame_err;
-	output	wire		o_ck_uart;
+module rxuart(
+	      input	       i_clk,
+	      input	       i_reset,
 
+	      input [30:0]     i_setup,
+	      input	       i_uart_rx,
+	      output reg       o_wr,
+	      output reg [7:0] o_data,
+	      output reg       o_break,
+	      output reg       o_parity_err,
+	      output reg       o_frame_err,
+	      output	       o_ck_uart);
+
+	parameter [30:0] INITIAL_SETUP = 31'd868;
 
 	wire	[27:0]	clocks_per_baud, break_condition, half_baud;
 	wire	[1:0]	data_bits;

@@ -28,8 +28,8 @@ module nanomac_tb
    input [7:0]	    kbd_data, 
    
    // interface to sd card
-   input [31:0]	    image_size,      // length of image file
-   input [3:0]	    image_mounted,   // two floppy drives, two scsi drives
+   input [31:0]	    image_size, // length of image file
+   input [3:0]	    image_mounted, // two floppy drives, two scsi drives
 
    // low level sd card interface
    output	    sdclk,
@@ -50,6 +50,10 @@ module nanomac_tb
    output	    sd_we, // write enable
    output	    sd_ras, // row address select
    output	    sd_cas, // columns address select
+
+   // serial interface
+   output	    uart_txd,
+   input	    uart_rxd,
    
    // interface to sdram controller
    output	    sdram_oe,
@@ -191,12 +195,10 @@ macplus macplus (
 	.sdram_oe(sdram_oe),
 	.sdram_do(sdram_dout), // sdram_do (sim sram), sdram_dout = (sim sdram)
  
-        .UART_CTS(),
+        .UART_TXD(uart_txd),
+        .UART_RXD(uart_rxd),
         .UART_RTS(),
-        .UART_RXD(),
-        .UART_TXD(),
-        .UART_DTR(),
-        .UART_DSR()
+        .UART_CTS(1'b1)
 );
 
 endmodule

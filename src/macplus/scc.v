@@ -904,20 +904,12 @@ wr_3_a[7:6]  -- bits per char
 
 */
 
-
-
-//reg [23:0] baud_divid_speed_a = 24'd1088;
-//reg [23:0] baud_divid_speed_a = 24'd544;
-reg [23:0] baud_divid_speed_a = 24'd282;
-//reg [23:0] baud_divid_speed_a = 24'd564;
+reg [23:0] baud_divid_speed_a = 16000000/9600;
 wire tx_busy_a;
 wire rx_wr_a;
 wire [30:0] uart_setup_rx_a = { 1'b0, bit_per_char_a, 1'b0, parity_ena_a, 1'b0, parity_even_a, baud_divid_speed_a  } ;
 wire [30:0] uart_setup_tx_a = { 1'b0, bit_per_char_a, 1'b0, parity_ena_a, 1'b0, parity_even_a, baud_divid_speed_a  } ;
-//wire [30:0] uart_setup_rx_a = { 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, baud_divid_speed_a  } ;
-//wire [30:0] uart_setup_tx_a = { 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, baud_divid_speed_a  } ;
 
-`ifdef NOT_IMPLEMENTED_YET
 rxuart rxuart_a (
 	.i_clk(clk), 
 	.i_reset(reset_a|reset_hw), 
@@ -942,7 +934,7 @@ txuart txuart_a
 	.i_cts_n(1'b0), 
 	.o_uart_tx(txd), 
 	.o_busy(tx_busy_a)); // TODO -- do we need this busy line?? probably 
-`endif
+
 	wire cts_a = ~tx_busy_a;
 	
 	// RTS and CTS are active low

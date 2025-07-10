@@ -46,8 +46,8 @@ module macplus
 	input [9:0]	       kbd_data,
 
         // set the real-world inputs to sane defaults
-	input		       configROMSize, // 64k or 128K ROM
-	input [1:0]	       configRAMSize, // 128k, 512k, 1MB or 4MB
+	input		       configROMSize,     // 64k or 128K ROM
+	input [1:0]	       configRAMSize,     // 128k, 512k, 1MB or 4MB
 	input		       configMachineType, // 0 = Plus, 1 = SE
 	input [1:0]	       configFloppyWProt,
 	input		       configSCSIWProt,
@@ -65,12 +65,11 @@ module macplus
 	input		       sdc_data_en,
 	input [8:0]	       sdc_addr,
 
-	input		       UART_CTS,
-	output		       UART_RTS,
-	input		       UART_RXD,
+        // serial port
 	output		       UART_TXD,
-	output		       UART_DTR,
-	input		       UART_DSR,
+	input		       UART_RXD,
+	output		       UART_RTS,
+	input		       UART_CTS,
 
         // interface to toplevel rom
 	output		       _romOE,
@@ -144,26 +143,12 @@ wire [32:0] TIMESTAMP;
 // Serial Ports
 //
 wire serialOut;
-wire serialIn;
-wire serialCTS;
+wire serialIn = UART_RXD;
 wire serialRTS;
+wire serialCTS = UART_CTS;
 
-assign serialIn =  0; 
 assign UART_TXD = serialOut;
-//assign UART_RTS = UART_CTS;
-assign UART_RTS = serialRTS ;
-assign UART_DTR = UART_DSR;
-
-//assign {UART_RTS, UART_TXD, UART_DTR} = 0;
-/*
-	input         UART_CTS,
-	output        UART_RTS,
-	input         UART_RXD,
-	output        UART_TXD,
-	output        UART_DTR,
-	input         UART_DSR,
-*/
-
+assign UART_RTS = serialRTS;
 
 // interconnects
 // CPU

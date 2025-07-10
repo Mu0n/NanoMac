@@ -16,8 +16,8 @@ add_file macplus/adb.sv
 add_file macplus/floppy_track_codec.v
 add_file macplus/floppy_track_buffer.v
 add_file macplus/scsi.v
-#add_file macplus/uart/rxuart.v
-#add_file macplus/uart/txuart.v
+add_file macplus/uart/rxuart.v
+add_file macplus/uart/txuart.v
 add_file macplus/via6522.v
 add_file macplus/keyboard.v
 

@@ -35,6 +35,8 @@
         <File path="macplus/floppy.v" type="file.verilog" enable="1"/>
         <File path="macplus/rtc.v" type="file.verilog" enable="1"/>
         <File path="macplus/scc.v" type="file.verilog" enable="1"/>
+        <File path="macplus/uart/rxuart.v" type="file.verilog" enable="1"/>
+        <File path="macplus/uart/txuart.v" type="file.verilog" enable="1"/>
         <File path="macplus/videoShifter.v" type="file.verilog" enable="1"/>
         <File path="macplus/adb.sv" type="file.verilog" enable="1"/>
         <File path="macplus/floppy_track_codec.v" type="file.verilog" enable="1"/>

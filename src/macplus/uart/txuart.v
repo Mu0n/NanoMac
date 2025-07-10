@@ -93,11 +93,24 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
 //
-`default_nettype	none
-//
-//
-module txuart(i_clk, i_reset, i_setup, i_break, i_wr, i_data,
-		i_cts_n, o_uart_tx, o_busy);
+module txuart(
+	      input	   i_clk,
+	      input	   i_reset,
+	      input [30:0] i_setup,
+	      input	   i_break,
+	      input	   i_wr,
+	      // And the UART input line itself
+	      input [7:0]  i_data,
+	      // Hardware flow control Ready-To-Send bit.  Set this to one to use
+	      // the core without flow control.  (A more appropriate name would be
+	      // the Ready-To-Receive bit ...)
+	      input	   i_cts_n,
+	      output reg   o_uart_tx,
+	      // A line to tell others when we are ready to accept data.  If
+	      // (i_wr)&&(!o_busy) is ever true, then the core has accepted a byte
+	      // for transmission.
+	      output	   o_busy);
+   
 	parameter	[30:0]	INITIAL_SETUP = 31'd868;
 	//
 	localparam 	[3:0]	TXU_BIT_ZERO  = 4'h0;
@@ -116,22 +129,6 @@ module txuart(i_clk, i_reset, i_setup, i_break, i_wr, i_data,
 	localparam 	[3:0]	TXU_IDLE      = 4'hf;
 	//
 	//
-	input	wire		i_clk, i_reset;
-	input	wire	[30:0]	i_setup;
-	input	wire		i_break;
-	input	wire		i_wr;
-	input	wire	[7:0]	i_data;
-	// Hardware flow control Ready-To-Send bit.  Set this to one to use
-	// the core without flow control.  (A more appropriate name would be
-	// the Ready-To-Receive bit ...)
-	input	wire		i_cts_n;
-	// And the UART input line itself
-	output	reg		o_uart_tx;
-	// A line to tell others when we are ready to accept data.  If
-	// (i_wr)&&(!o_busy) is ever true, then the core has accepted a byte
-	// for transmission.
-	output	wire		o_busy;
-
 	wire	[27:0]	clocks_per_baud, break_condition;
 	wire	[1:0]	i_data_bits, data_bits;
 	wire		use_parity, parity_odd, dblstop, fixd_parity,

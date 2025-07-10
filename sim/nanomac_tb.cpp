@@ -21,14 +21,14 @@ extern void sd_handle(float ms, Vnanomac_tb *tb);
 
 #define ROM "plusrom.bin"
 
-#define RAM_SIZE 2    // 0=128k, 1=512k, 2=1MB, 3=4MB
+#define RAM_SIZE 0    // 0=128k, 1=512k, 2=1MB, 3=4MB
 
 #define TICKLEN   (0.5/16000000)
 
 // #define DEBUG_MEM
 
 // times with 128k ram, 512k delays everything by 2.7 seconds
-// #define TRACESTART 0.0
+#define TRACESTART 0.0
 // #define TRACESTART 1.9   // kbd model cmd and first iwm access
 // #define TRACESTART 2.2   // checkerboard, kbd  inquiry cmd, first SCSI
 // #define TRACESTART 2.8   // tachometer calibration (until ~ 2.97)
@@ -37,10 +37,8 @@ extern void sd_handle(float ms, Vnanomac_tb *tb);
 // #define TRACESTART 5.1   // Sony write called
 // #define TRACESTART 20.0   // 128k / system 3.0 desktop reached
 
-#define TRACESTART 25.5
-
 #ifdef TRACESTART
-#define TRACEEND     (TRACESTART + 0.5)
+#define TRACEEND     (TRACESTART + 0.1)
 #endif
 
 // floppy disk lba to side/track/sector translation table
@@ -361,6 +359,7 @@ uint32_t sdram[2*1024*1024];  // 2M 32 bit words
 // proceed simulation by one tick
 void tick(int c) {
   static uint64_t ticks = 0;
+  static int uart_state = -1;
 
   tb->eval();
 
@@ -378,7 +377,33 @@ void tick(int c) {
       printf("%.3fms Out of reset\n", simulation_time*1000);
       tb->reset = 0;
     }
+    
+    if( uart_state == -1) {
+      if(simulation_time > .05) {
+	printf("%.3fms UART start\n", simulation_time*1000);
+	uart_state = 0;
+      }
+    } else if(uart_state != -2) {
+      char *data = (char*)"Hello World";
+      int bit = uart_state / (16000000/9600);   // bit rate = 9k6
 
+      int stop_bits = 2;
+      int byte = bit / (9+stop_bits);         //
+      int bit_in_byte = bit % (9+stop_bits);
+
+      if(bit_in_byte == 0)
+	tb->uart_rxd = 0;                                  // start bit
+      else if(bit_in_byte <= 8)
+	tb->uart_rxd = (data[byte] & (1<<(bit_in_byte-1)))?1:0;    // data bit
+      else
+	tb->uart_rxd = 1;                                  // stop bit(s)
+
+      uart_state++;
+
+      if((byte == strlen(data)-1) && (bit_in_byte > 8))
+	uart_state = -2;
+    }
+      
     // send a keycode
     if( !tb->kbd_strobe && simulation_time > 2.3) {
       printf("%.3fms KBD send code #1\n", simulation_time*1000);
@@ -567,6 +592,7 @@ int main(int argc, char **argv) {
   trace->open("nanomac.fst");
   
   tb->reset = 1;
+  tb->uart_rxd = 1;
   tb->ram_size = RAM_SIZE;
   
   /* run for a while */

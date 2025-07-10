@@ -183,6 +183,8 @@ hid hid (
         .joystick1()
          );
    
+wire uart_rxd, uart_txd;
+   
 sysctrl sysctrl (
         .clk(clk_pixel),
         .reset(!pll_lock),
@@ -204,6 +206,11 @@ sysctrl sysctrl (
         .int_in( { 4'b0000, sdc_int, 1'b0, hid_int, 1'b0 }),
         .int_ack( int_ack ),
 
+		// syscontrol for nanomac implements a 9600 bit/s 8n1 uart for the
+		// wifi at interface
+		.uart_rxd( uart_rxd ),   // into core
+		.uart_txd( uart_txd ),   // from core
+				 
         .buttons( {user, reset} ),
         .leds(),
         .color(ws2812_color)
@@ -488,16 +495,14 @@ macplus macplus (
     .sdram_oe(sdram_oe),
     .sdram_do(sdram_dout),
 
-    .UART_CTS(1'b0),
-    .UART_RTS(),
-    .UART_RXD(1'b0),
-    .UART_TXD(),
-    .UART_DTR(),
-    .UART_DSR(1'b0)
+    .UART_CTS( 1'b1 ),
+	.UART_RTS(),
+    .UART_RXD( uart_rxd ),
+    .UART_TXD( uart_txd )
 );
 
 wire [5:0] leds;
-assign leds[5:4] = 2'b00;
+assign leds[5:4] = 2'b00;   
 assign leds_n = ~leds;   
 					
 /* -------------------- HDMI video and audio -------------------- */
