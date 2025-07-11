@@ -29,6 +29,7 @@ module sysctrl (
   // values that can be configured by the user		
   output	    system_reset,
   output reg	    system_widescreen,
+  output reg	    system_serial_ext,
   output reg [1:0]  system_memory,
   output reg [1:0]  system_floppy_wprot,
   output reg	    system_hdd_wprot
@@ -74,7 +75,7 @@ always @(posedge clk)
 
 // This should actually reflect what the core has configured
 wire [31:0] port_status = { 24'd19200, 4'd8, 2'd0, 2'd1 };
-wire [11:0] uart_bit_cnt = 16000000 / 19200;   
+wire [11:0] uart_bit_cnt = (15600000-9600) / 19200;   
    
 reg       port_out_availableD;
 reg [7:0] port_cmd;   
@@ -111,8 +112,8 @@ always @(posedge clk) begin
       if(uart_tx_state == 4'd0) begin
 	 // idle state: wait for falling data edge
 	 if(!uart_txd) begin
-	    uart_tx_cnt <= uart_bit_cnt/2;   // half bit time
-	    uart_tx_state <= 4'd1;           // wait for first data bit	    
+	    uart_tx_cnt <= {1'b0, uart_bit_cnt[11:1]};   // half bit time
+	    uart_tx_state <= 4'd1;                       // wait for first data bit	    
 	 end
       end else if(uart_tx_cnt == 12'd0) begin
 	 // data state: receive one byte incl. start and stop bits	 
@@ -180,9 +181,10 @@ always @(posedge clk) begin
 	 uart_rx_state <= uart_rx_state + 4'd1;   // transmit next data bit
 
 	 // send 8 data bits and stop bit
-	 if(uart_rx_state <= 9)
-	   { uart_rx_byte, uart_rxd } <= { 1'b1, uart_rx_byte };
-	 else
+	 if(uart_rx_state <= 9) begin
+	    uart_rxd <= uart_rx_byte[0];
+	    uart_rx_byte <= { 1'b1, uart_rx_byte[7:1] };
+	 end else
 	   uart_rx_state <= 4'd0;  // done sending after stop bit
 
       end else
@@ -212,6 +214,7 @@ always @(posedge clk) begin
       // OSD value defaults. These should be sane defaults, but the MCU
       // will very likely override these early
       system_widescreen <= 1'b0;           // normal screen by default      
+      system_serial_ext <= 1'b0;           // redirect serial to wifi by default
       system_memory <= 2'd0;               // 128k TODO: 1M
       system_floppy_wprot <= 2'b11;        // both disks write protected
       system_hdd_wprot <= 1'b1;            // SCSI write protected
@@ -313,6 +316,8 @@ always @(posedge clk) begin
 		   if(id == "X") system_widescreen <= data_in[0];
 		   // Value "S": HDD write protect enabled
 		   if(id == "S") system_hdd_wprot <= data_in[0];
+		   // Value "M": serial modem port redirect to WiFi(0) or external/MIDI(1)
+		   if(id == "M") system_serial_ext <= data_in[0];
                 end
             end
 

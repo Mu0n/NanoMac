@@ -72,7 +72,7 @@ module dataController (
 	// misc
 	output		       memoryOverlayOn,
 
-	output [3:0]	       diskLED,
+	output [4:0]	       diskLED,
 		       
         // sd card interface
 	input [31:0]	       sdc_img_size,
@@ -480,7 +480,10 @@ module dataController (
 		.driveSel(driveSel),
 	        .diskWProt(floppy_wprot),
 		.dataOut(iwmDataOut),
-		.diskLED(diskLED[1:0]),
+
+	        // LED[4] is the "buffer is dirty" led indicating, that thw disk
+	        // should be ejected to write all data back to disk
+		.diskLED({diskLED[4],diskLED[1:0]}),
 	      
                 // interface to sd card
 	        .sd_img_size     ( sdc_img_size    ),

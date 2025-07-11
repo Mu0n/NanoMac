@@ -158,9 +158,9 @@ module scc
 			rx_wr_a_latch<=1;
 		end
 	
-	
-		wr_data_a<=0;
+	        if(tx_busy_a) wr_data_a<=0;	   
 		wr_data_b<=0;
+	   
 		if (reset) begin
 		  rindex_latch <= 0;
 			//data_a <= 0;
@@ -800,120 +800,62 @@ end
 		end
 	end
 	
-
-
-	/* NYI */
-//	assign txd = 1;
-//	assign rts = 1;
-
-	/* UART */
-
-//wr_3_a
-//wr_3_b
 // bit 
 wire parity_ena_a= wr4_a[0];
 wire parity_even_a= wr4_a[1];
-reg [1:0] stop_bits_a= 2'b00;
-reg [1:0] bit_per_char_a = 2'b00;
-/*
-76543210
-data>>2 & 3
-wr4_a[3:2] 
-case(wr4_a[3:2])
-2'b00:
-// sync mode enable
-2'b01:
-// 1 stop bit
-	stop_bits_a <= 2'b0;
-2'b10:
-// 1.5 stop bit
-	stop_bits_a <= 2'b0;
-2'b11:
-// 2 stop bit
-	stop_bits_a <= 2'b1;
-default:
-	stop_bits_a <= 2'b0;
-endcase
 
-*/
-/*
-76543210
-^__ 76 
-wr_3_a[7:6]  -- bits per char
+wire [1:0] stop_bits_a =
+	   (wr4_a[3:2] == 2'b11)?2'd1:   // two stop  bits
+	   2'd0;                         // otherwise one
+   
+wire [1:0] bit_per_char_a =
+	   (wr3_a[7:6] == 2'b00)?2'd3:   // 5 bits
+	   (wr3_a[7:6] == 2'b01)?2'd1:   // 7 bits
+	   (wr3_a[7:6] == 2'b10)?2'd2:   // 6 bits
+	   2'd0;                         // 8 bits
 
-                case (wr_3_a[7:6]})
-                        2'b00:  // 5
-				bit_per_char_a  <= 2'b11;
-                        2'b01:  // 7
-				bit_per_char_a  <= 2'b01;
-                        2'b10:  // 6 
-				bit_per_char_a  <= 2'b10;
-                        2'b11:  // 8
-				bit_per_char_a  <= 2'b00;
-		endcase
-*/
-/*
-300 -- 62.668800 /  =  208896
-600 -- 62.668800 /  =  104448
-1200-- 62.668800 /  =  69632
-2400 -- 62.668800 / 2400 = 26112
-4800 -- 62.668800 / 4800  = 13056
-9600 -- 62.668800 / 9600 = 6528
-1440 -- 62.668800 / 14400 = 4352
-19200 -- 62.668800 /  19200= 3264
-38400 -- 62.668800 / 28800 =  2176
-38400 -- 62.668800 / 38400 =  1632
-57600 -- 62.668800 / 57600 = 1088
-115200 -- 62.668800 / 115200 = 544
-230400 -- 62.668800 / 230400 = 272
-
-
-32.5 / 115200 = 
-
-*/
 // case the baud rate based on wr12_a and 13_a
 // wr_12_a  -- contains the baud rate lower byte
 // wr_13_a  -- contains the baud rate high byte
-/*
-        always @(posedge clk) begin
-                case ({wr13_a,wr12_a})
-                        16'd380:  // 300 baud
-                                baud_divid_speed_a <= 24'd108333;
-                        16'd94:  // 1200 baud
-                                baud_divid_speed_a <= 24'd27083;
-                        16'd46:  // 2400 baud
-                                baud_divid_speed_a <= 24'd13542;
-                        16'd22:  // 4800 baud
-                                baud_divid_speed_a <= 24'd6770;
-                        16'd10:  // 9600 baud
-                                baud_divid_speed_a <= 24'd3385;
-                        16'd6:  // 14400 baud
-                                baud_divid_speed_a <= 24'd2257;
-                        16'd4:  // 19200 baud
-                                baud_divid_speed_a <= 24'd1693;
-                        16'd2:  // 28800 baud
-                                baud_divid_speed_a <= 24'd1128;
-                        16'd1:  // 38400 baud
-                                baud_divid_speed_a <= 24'd846;
-                        16'd0:  // 57600 baud
-                                baud_divid_speed_a <= 24'd564;
-                        default: 
-                                baud_divid_speed_a <= 24'd282;
-                endcase
-        end
 
-*/
+// formula from datasheet: value = clk/(2*baud*clk_mode)-2
 
-reg [23:0] baud_divid_speed_a = 16000000/9600;
+wire [15:0] baud_base = {wr13_a,wr12_a}+16'd2;   
+wire [23:0] baud_divid_speed_a = // { 3'b000, baud_base, 4'b0000, 1'b0};   
+	    (wr4_a[7:6] == 2'b00)?{ 7'b0000000, baud_base,      1'b0}:  // clock mode x1
+	    (wr4_a[7:6] == 2'b01)?{ 3'b000, baud_base, 4'b0000, 1'b0}:  // clock mode x16
+	    (wr4_a[7:6] == 2'b10)?{ 2'b00, baud_base, 5'b00000, 1'b0}:  // clock mode x32
+	                          { 1'b0, baud_base, 6'b000000, 1'b0};  // clock mode x64
+
+// The SCC in the MacPlus runs at 3.686 MHz
+// The transmitter and receiver clock is gated
+// to this value.
+reg [31:0] clk_en_cnt;
+reg 	   clk_en;
+
+localparam SYSTEM_CLOCK = 32'd15_600_000;
+localparam SCC_CLOCK    =  32'd3_686_000;
+
+always @(posedge clk) begin
+   clk_en <= 1'b0;
+	   
+   if(clk_en_cnt < SYSTEM_CLOCK)
+     clk_en_cnt <= clk_en_cnt + SCC_CLOCK;
+   else begin
+      clk_en_cnt <= clk_en_cnt - SYSTEM_CLOCK + SCC_CLOCK;
+      clk_en <= 1'b1;
+   end
+end
+
 wire tx_busy_a;
 wire rx_wr_a;
-wire [30:0] uart_setup_rx_a = { 1'b0, bit_per_char_a, 1'b0, parity_ena_a, 1'b0, parity_even_a, baud_divid_speed_a  } ;
-wire [30:0] uart_setup_tx_a = { 1'b0, bit_per_char_a, 1'b0, parity_ena_a, 1'b0, parity_even_a, baud_divid_speed_a  } ;
+wire [30:0] uart_setup_a = { 1'b0, bit_per_char_a, 1'b0, parity_ena_a, 1'b0, parity_even_a, baud_divid_speed_a  } ;
 
 rxuart rxuart_a (
 	.i_clk(clk), 
+	.i_en(clk_en), 
 	.i_reset(reset_a|reset_hw), 
-	.i_setup(uart_setup_rx_a), 
+	.i_setup(uart_setup_a), 
 	.i_uart_rx(rxd), 
 	.o_wr(rx_wr_a), // TODO -- check on this flag
 	.o_data(data_a),   // TODO we need to save this off only if wreq is set, and mux it into data_a in the right spot
@@ -922,11 +864,13 @@ rxuart rxuart_a (
 	.o_frame_err(frame_err_a), 
 	.o_ck_uart()
 	);
+   
 txuart txuart_a
 	(
 	.i_clk(clk), 
+	.i_en(clk_en), 
 	.i_reset(reset_a|reset_hw), 
-	.i_setup(uart_setup_tx_a), 
+	.i_setup(uart_setup_a), 
 	.i_break(1'b0), 
 	.i_wr(wr_data_a),   // TODO -- we need to send data when we get the register command i guess???
 	.i_data(tx_data_a),
@@ -935,9 +879,10 @@ txuart txuart_a
 	.o_uart_tx(txd), 
 	.o_busy(tx_busy_a)); // TODO -- do we need this busy line?? probably 
 
-	wire cts_a = ~tx_busy_a;
+wire cts_a = ~tx_busy_a;
 	
-	// RTS and CTS are active low
-	assign rts = rx_wr_a_latch;
-	assign wreq=1;
+// RTS and CTS are active low
+assign rts = rx_wr_a_latch;
+assign wreq=1;
+
 endmodule

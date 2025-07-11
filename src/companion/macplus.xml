@@ -64,6 +64,10 @@
 	<listentry label="Normal" value="0"/>
 	<listentry label="Wide" value="1"/>
       </list>
+      <list label="Serial:" id="M" default="0">
+	<listentry label="WiFi" value="0"/>
+	<listentry label="External" value="1"/>
+      </list>
       <button label="Save settings" action="save"/>
     </menu>    
     <button label="Reset" action="reset_hide"/>

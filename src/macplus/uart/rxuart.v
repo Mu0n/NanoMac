@@ -117,6 +117,7 @@
 
 module rxuart(
 	      input	       i_clk,
+	      input	       i_en,
 	      input	       i_reset,
 
 	      input [30:0]     i_setup,
@@ -157,8 +158,8 @@ module rxuart(
 	initial	q_uart  = 1'b0;
 	initial	qq_uart = 1'b0;
 	initial	ck_uart = 1'b0;
-	always @(posedge i_clk)
-	begin
+	always @(posedge i_clk) 
+	  if(i_en) begin
 		q_uart <= i_uart_rx;
 		qq_uart <= q_uart;
 		ck_uart <= qq_uart;
@@ -175,13 +176,15 @@ module rxuart(
 	reg	[27:0]	chg_counter;
 	initial	chg_counter = 28'h00;
 	always @(posedge i_clk)
+	  if(i_en) begin
 		if (i_reset)
 			chg_counter <= 28'h00;
 		else if (qq_uart != ck_uart)
 			chg_counter <= 28'h00;
 		else if (chg_counter < break_condition)
 			chg_counter <= chg_counter + 1;
-
+	  end
+	     
 	// Are we in a break condition?
 	//
 	// A break condition exists if the line is held low for longer than
@@ -191,6 +194,7 @@ module rxuart(
 	// the line idles again.
 	initial	o_break    = 1'b0;
 	always @(posedge i_clk)
+	  if(i_en)
 		o_break <= ((chg_counter >= break_condition)&&(~ck_uart))? 1'b1:1'b0;
 
 	// Are we between characters?
@@ -206,6 +210,7 @@ module rxuart(
 	reg	line_synch;
 	initial	line_synch = 1'b0;
 	always @(posedge i_clk)
+	  if(i_en)
 		line_synch <= ((chg_counter >= break_condition)&&(ck_uart));
 
 	// Are we in the middle of a baud iterval?  Specifically, are we
@@ -215,6 +220,7 @@ module rxuart(
 	reg	half_baud_time;
 	initial	half_baud_time = 0;
 	always @(posedge i_clk)
+	  if(i_en)
 		half_baud_time <= (~ck_uart)&&(chg_counter >= half_baud);
 
 
@@ -222,6 +228,7 @@ module rxuart(
 	// outside of receiving/processing a character.
 	initial	r_setup     = INITIAL_SETUP[29:0];
 	always @(posedge i_clk)
+	  if(i_en)
 		if (state >= `RXU_RESET_IDLE)
 			r_setup <= i_setup[29:0];
 
@@ -254,7 +261,7 @@ module rxuart(
 	//
 	initial	state = `RXU_RESET_IDLE;
 	always @(posedge i_clk)
-	begin
+	  if(i_en) begin
 		if (i_reset)
 			state <= `RXU_RESET_IDLE;
 		else if (state == `RXU_RESET_IDLE)
@@ -326,6 +333,7 @@ module rxuart(
 	// updated.
 	reg	[7:0]	data_reg;
 	always @(posedge i_clk)
+	  if(i_en)
 		if ((zero_baud_counter)&&(state != `RXU_PARITY))
 			data_reg <= { ck_uart, data_reg[7:1] };
 
@@ -342,17 +350,20 @@ module rxuart(
 	// reset before any transmission takes place.
 	reg		calc_parity;
 	always @(posedge i_clk)
+	  if(i_en) begin
 		if (state == `RXU_IDLE)
 			calc_parity <= 0;
 		else if (zero_baud_counter)
 			calc_parity <= calc_parity ^ ck_uart;
-
+	  end
+   
 	// Parity error logic
 	//
 	// Set during the parity bit interval, read during the last stop bit
 	// interval, cleared on BREAK, RESET_IDLE, or IDLE states.
 	initial	o_parity_err = 1'b0;
 	always @(posedge i_clk)
+	  if(i_en) begin
 		if ((zero_baud_counter)&&(state == `RXU_PARITY))
 		begin
 			if (fixd_parity)
@@ -369,7 +380,8 @@ module rxuart(
 				o_parity_err <= (calc_parity == ck_uart);
 		end else if (state >= `RXU_BREAK)
 			o_parity_err <= 1'b0;
-
+	  end
+   
 	// Frame error determination
 	//
 	// For the purpose of this controller, a frame error is defined as a
@@ -380,12 +392,14 @@ module rxuart(
 	// most importantly in RXU_IDLE.
 	initial	o_frame_err  = 1'b0;
 	always @(posedge i_clk)
+	  if(i_en) begin
 		if ((zero_baud_counter)&&((state == `RXU_STOP)
 						||(state == `RXU_SECOND_STOP)))
 			o_frame_err <= (o_frame_err)||(~ck_uart);
 		else if ((zero_baud_counter)||(state >= `RXU_BREAK))
 			o_frame_err <= 1'b0;
-
+	  end
+	     
 	// Our data bit logic doesn't need nearly the complexity of all that
 	// work above.  Indeed, we only need to know if we are at the end of
 	// a stop bit, in which case we copy the data_reg into our output
@@ -400,7 +414,8 @@ module rxuart(
 	reg	pre_wr;
 	initial	pre_wr = 1'b0;
 	always @(posedge i_clk)
-		if (i_reset)
+	  if(i_en) begin
+	     if (i_reset)
 		begin
 			pre_wr <= 1'b0;
 			o_data <= 8'h00;
@@ -415,18 +430,21 @@ module rxuart(
 			endcase
 		end else if ((zero_baud_counter)||(state == `RXU_IDLE))
 			pre_wr <= 1'b0;
-
+	  end
+	     
 	// Create an output strobe, true for one clock only, once we know
 	// all we need to know.  o_data will be set on the last baud interval,
 	// o_parity_err on the last parity baud interval (if it existed,
 	// cleared otherwise, so ... we should be good to go here.)
 	initial	o_wr   = 1'b0;
 	always @(posedge i_clk)
+	  if(i_en) begin
 		if ((zero_baud_counter)||(state == `RXU_IDLE))
 			o_wr <= (pre_wr)&&(!i_reset);
 		else
 			o_wr <= 1'b0;
-
+	  end
+	     
 	// The baud counter
 	//
 	// This is used as a "clock divider" if you will, but the clock needs
@@ -434,6 +452,7 @@ module rxuart(
 	// we set ourselves up for clocks_per_baud counts between baud
 	// intervals.
 	always @(posedge i_clk)
+	  if(i_en) begin
 		if (i_reset)
 			baud_counter <= clocks_per_baud-28'h01;
 		else if (zero_baud_counter)
@@ -444,7 +463,8 @@ module rxuart(
 			`RXU_IDLE:	baud_counter <= clocks_per_baud-28'h01;
 			default:	baud_counter <= baud_counter-28'h01;
 		endcase
-
+	  end
+   
 	// zero_baud_counter
 	//
 	// Rather than testing whether or not (baud_counter == 0) within our
@@ -453,11 +473,12 @@ module rxuart(
 	// before--cleaning up some otherwise difficult timing dependencies.
 	initial	zero_baud_counter = 1'b0;
 	always @(posedge i_clk)
+	  if (i_en) begin	  
 		if (state == `RXU_IDLE)
 			zero_baud_counter <= 1'b0;
 		else
 		zero_baud_counter <= (baud_counter == 28'h01);
-
+	  end
 
 endmodule
 

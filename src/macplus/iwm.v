@@ -51,7 +51,7 @@ module iwm
 	input [1:0]   diskWProt, // write protection
 	output [15:0] dataOut,
 
-	output [1:0]  diskLED,
+	output [2:0]  diskLED,
 
         // sd card interface
 	input [31:0]  sd_img_size,
@@ -77,8 +77,10 @@ wire [1:0]	      diskAct;
 wire [1:0]	      diskMotor;
 
 wire [1:0]	      driveMask = selectExternalDrive?2'b10:2'b01;
-      
-assign diskLED = driveMask & insertDisk & diskAct & diskMotor;  
+
+// light both LEDs permanently while the track buffer is dirty and
+// needs to be written back by e.g. ejecting the disk
+assign diskLED = { dirty, driveMask & insertDisk & diskAct & diskMotor };  
 
 wire		      errorInt, errorExt;   
    
@@ -87,6 +89,7 @@ wire [6:0] trackInt;
 wire [6:0] trackExt;  
 
 wire	   ready;   
+wire	   dirty;   
 wire	   readyInt = selectExternalDrive?1'b0:ready;   
 wire	   readyExt = selectExternalDrive?ready:1'b0;   
 
@@ -150,6 +153,7 @@ floppy_track_buffer fb
      .data(data),
      .spt(spt),
      .ready(ready),
+     .dirty(dirty),
 
      // write direction (decoding data encoded by mac)
      .writeDataDecoded(writeDataDecoded),

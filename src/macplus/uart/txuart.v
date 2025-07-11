@@ -95,6 +95,7 @@
 //
 module txuart(
 	      input	   i_clk,
+	      input	   i_en,
 	      input	   i_reset,
 	      input [30:0] i_setup,
 	      input	   i_break,
@@ -168,14 +169,16 @@ module txuart(
 	// initial	qq_cts_n = 1'b1;
 	// initial	ck_cts   = 1'b0;
 	always	@(posedge i_clk)
+	  if(i_en)
 		{ qq_cts_n, q_cts_n } <= { q_cts_n, i_cts_n };
 	always	@(posedge i_clk)
+	  if(i_en)
 		ck_cts <= (!qq_cts_n)||(!hw_flow_control);
 
 	initial	o_uart_tx = 1'b1;
 	initial	r_busy = 1'b1;
 	initial	state  = TXU_IDLE;
-	always @(posedge i_clk)
+	always @(posedge i_clk)	if(i_en) begin
 	if (i_reset)
 	begin
 		r_busy <= 1'b1;
@@ -231,6 +234,7 @@ module txuart(
 			// for the baud clock to finish counting
 			// out this last bit.
 		end
+	    end 
 	end 
 
 	// o_busy
@@ -251,7 +255,8 @@ module txuart(
 	// the size of our data word.
 	initial	r_setup = INITIAL_SETUP;
 	always @(posedge i_clk)
-	if (!o_busy)
+	if (i_en)
+	    if (!o_busy)
 		r_setup <= i_setup;
 
 	// lcl_data
@@ -265,11 +270,13 @@ module txuart(
 	// we simple logically shift the register right to grab the next bit.
 	initial	lcl_data = 8'hff;
 	always @(posedge i_clk)
-	if (!r_busy)
+	if (i_en) begin
+	    if (!r_busy)
 		lcl_data <= i_data;
-	else if (zero_baud_counter)
+	    else if (zero_baud_counter)
 		lcl_data <= { 1'b0, lcl_data[7:1] };
-
+	end
+	   
 	// o_uart_tx
 	//
 	// This is the final result/output desired of this core.  It's all
@@ -286,17 +293,18 @@ module txuart(
 	//		or changing, and hence what it's calculated value is.
 	//	1'b1 at all other times (stop bits, idle, etc)
 	always @(posedge i_clk)
-	if (i_reset)
+	if (i_en) begin
+	  if (i_reset)
 		o_uart_tx <= 1'b1;
-	else if ((i_break)||((i_wr)&&(!r_busy)))
+	  else if ((i_break)||((i_wr)&&(!r_busy)))
 		o_uart_tx <= 1'b0;
-	else if (zero_baud_counter)
+	  else if (zero_baud_counter)
 		casez(state)
 		4'b0???:	o_uart_tx <= lcl_data[0];
 		TXU_PARITY:	o_uart_tx <= calc_parity;
 		default:	o_uart_tx <= 1'b1;
 		endcase
-
+	end
 
 	// calc_parity
 	//
@@ -306,19 +314,20 @@ module txuart(
 	// sum of all the data bits (plus one for even parity).
 	initial	calc_parity = 1'b0;
 	always @(posedge i_clk)
-	if (!o_busy)
+	if (i_en) begin
+	  if (!o_busy)
 		calc_parity <= i_setup[24];
-	else if (fixd_parity)
+	  else if (fixd_parity)
 		calc_parity <= fixdp_value;
-	else if (zero_baud_counter)
-	begin
+	  else if (zero_baud_counter)
+	  begin
 		if (state[3] == 0) // First 8 bits of msg
 			calc_parity <= calc_parity ^ lcl_data[0];
 		else if (state == TXU_IDLE)
 			calc_parity <= parity_odd;
-	end else if (!r_busy)
+	  end else if (!r_busy)
 		calc_parity <= parity_odd;
-
+	end
 
 	// All of the above logic is driven by the baud counter.  Bits must last
 	// clocks_per_baud in length, and this baud counter is what we use to
@@ -363,7 +372,7 @@ module txuart(
 	initial	zero_baud_counter = 1'b0;
 	initial	baud_counter = 28'h05;
 	always @(posedge i_clk)
-	begin
+	if (i_en) begin
 		zero_baud_counter <= (baud_counter == 28'h01);
 		if ((i_reset)||(i_break))
 		begin
@@ -393,11 +402,13 @@ module txuart(
 
 	initial	last_state = 1'b0;
 	always @(posedge i_clk)
-	if (dblstop)
+	if (i_en) begin
+	  if (dblstop)
 		last_state <= (state == TXU_SECOND_STOP);
-	else
+	  else
 		last_state <= (state == TXU_STOP);
-
+	end
+	   
 	// Verilator lint_off UNUSED
 	wire	[2:0]	unused;
 	assign	unused = { i_parity_odd, data_bits };
@@ -411,15 +422,18 @@ module txuart(
 
 	initial	f_past_valid = 1'b0;
 	always @(posedge  i_clk)
+	  if (i_en)
 		f_past_valid <= 1'b1;
 
 	always @(posedge i_clk)
-	if ((i_wr)&&(!o_busy))
+	  if (i_en)
+            if ((i_wr)&&(!o_busy))
 		fsv_data <= i_data;
 
 	initial	fsv_setup = INITIAL_SETUP;
 	always @(posedge i_clk)
-	if (!o_busy)
+	  if (i_en)
+	    if (!o_busy)
 		fsv_setup <= i_setup;
 
 	always @(*)
@@ -427,6 +441,7 @@ module txuart(
 
 
 	always @(posedge i_clk)
+	  if (i_en)
 		assert(zero_baud_counter == (baud_counter == 0));
 
 	always @(*)
@@ -446,15 +461,17 @@ module txuart(
 
 	// A single baud interval
 	always @(posedge i_clk)
-	if ((f_past_valid)&&(!$past(zero_baud_counter))
+	if (i_en) begin
+	  if ((f_past_valid)&&(!$past(zero_baud_counter))
 		&&(!$past(i_reset))&&(!$past(i_break)))
-	begin
+	  begin
 		assert($stable(o_uart_tx));
 		assert($stable(state));
 		assert($stable(lcl_data));
 		if ((state != TXU_IDLE)&&(state != TXU_BREAK))
 			assert($stable(calc_parity));
 		assert(baud_counter == $past(baud_counter)-1'b1);
+	  end
 	end
 
 	//
@@ -480,14 +497,16 @@ module txuart(
 
 	initial	f_five_seq = 0;
 	always @(posedge i_clk)
-	if ((i_reset)||(i_break))
+	if (i_en) begin
+	  if ((i_reset)||(i_break))
 		f_five_seq = 0;
-	else if ((state == TXU_IDLE)&&(i_wr)&&(!o_busy)
+	  else if ((state == TXU_IDLE)&&(i_wr)&&(!o_busy)
 			&&(i_data_bits == 2'b11)) // five data bits
 		f_five_seq <= 1;
-	else if (zero_baud_counter)
+	  else if (zero_baud_counter)
 		f_five_seq <= f_five_seq << 1;
-
+	end
+	   
 	always @(*)
 	if (|f_five_seq)
 	begin
@@ -560,14 +579,16 @@ module txuart(
 
 	initial	f_six_seq = 0;
 	always @(posedge i_clk)
-	if ((i_reset)||(i_break))
+	if (i_en) begin
+	  if ((i_reset)||(i_break))
 		f_six_seq = 0;
-	else if ((state == TXU_IDLE)&&(i_wr)&&(!o_busy)
+	  else if ((state == TXU_IDLE)&&(i_wr)&&(!o_busy)
 			&&(i_data_bits == 2'b10)) // six data bits
 		f_six_seq <= 1;
-	else if (zero_baud_counter)
+	  else if (zero_baud_counter)
 		f_six_seq <= f_six_seq << 1;
-
+	end
+	   
 	always @(*)
 	if (|f_six_seq)
 	begin
@@ -646,14 +667,16 @@ module txuart(
 	////////////////////////////////////////////////////////////////////////
 	initial	f_seven_seq = 0;
 	always @(posedge i_clk)
-	if ((i_reset)||(i_break))
+	if (i_en) begin
+	  if ((i_reset)||(i_break))
 		f_seven_seq = 0;
-	else if ((state == TXU_IDLE)&&(i_wr)&&(!o_busy)
+	  else if ((state == TXU_IDLE)&&(i_wr)&&(!o_busy)
 			&&(i_data_bits == 2'b01)) // seven data bits
 		f_seven_seq <= 1;
-	else if (zero_baud_counter)
+	  else if (zero_baud_counter)
 		f_seven_seq <= f_seven_seq << 1;
-
+	end
+	   
 	always @(*)
 	if (|f_seven_seq)
 	begin
@@ -740,14 +763,16 @@ module txuart(
 	////////////////////////////////////////////////////////////////////////
 	initial	f_eight_seq = 0;
 	always @(posedge i_clk)
-	if ((i_reset)||(i_break))
+	if (i_en) begin
+	  if ((i_reset)||(i_break))
 		f_eight_seq = 0;
-	else if ((state == TXU_IDLE)&&(i_wr)&&(!o_busy)
+	  else if ((state == TXU_IDLE)&&(i_wr)&&(!o_busy)
 			&&(i_data_bits == 2'b00)) // Eight data bits
 		f_eight_seq <= 1;
-	else if (zero_baud_counter)
+	  else if (zero_baud_counter)
 		f_eight_seq <= f_eight_seq << 1;
-
+	end
+	   
 	always @(*)
 	if (|f_eight_seq)
 	begin
@@ -838,11 +863,12 @@ module txuart(
 	//
 	////////////////////////////////////////////////////////////////////////
 	always @(posedge i_clk)
-	if (((|f_five_seq[5:0]) || (|f_six_seq[6:0]) || (|f_seven_seq[7:0])
+	if (i_en) begin
+	  if (((|f_five_seq[5:0]) || (|f_six_seq[6:0]) || (|f_seven_seq[7:0])
 			|| (|f_eight_seq[8:0]))
 		&& ($past(zero_baud_counter)))
 		assert(baud_counter == { 4'h0, fsv_setup[23:0] }-1);
-
+	end
 
 	////////////////////////////////////////////////////////////////////////
 	//
@@ -852,10 +878,11 @@ module txuart(
 	////////////////////////////////////////////////////////////////////////
 	initial	f_stop_seq = 1'b0;
 	always @(posedge i_clk)
-	if ((i_reset)||(i_break))
+	if (i_en) begin
+	  if ((i_reset)||(i_break))
 		f_stop_seq <= 0;
-	else if (zero_baud_counter)
-	begin
+	  else if (zero_baud_counter)
+	  begin
 		f_stop_seq <= 0;
 		if (f_stop_seq[0]) // Coming from a parity bit
 		begin
@@ -878,8 +905,9 @@ module txuart(
 			else
 				f_stop_seq[2] <= 1'b1;
 		end
+	  end
 	end
-
+	   
 	always @(*)
 	if (|f_stop_seq)
 	begin
@@ -940,25 +968,29 @@ module txuart(
 	reg	[1:0]	f_break_seq;
 	initial	f_break_seq = 2'b00;
 	always @(posedge i_clk)
-	if (i_reset)
+	if (i_en) begin
+	  if (i_reset)
 		f_break_seq <= 2'b00;
-	else if (i_break)
+	  else if (i_break)
 		f_break_seq <= 2'b01;
-	else if (!zero_baud_counter)
+	  else if (!zero_baud_counter)
 		f_break_seq <= { |f_break_seq, 1'b0 };
-	else
+	  else
 		f_break_seq <= 0;
-
+	end
+	   
 	always @(posedge i_clk)
-	if (f_break_seq[0])
+	if (i_en) begin
+	  if (f_break_seq[0])
 		assert(baud_counter == { $past(fsv_setup[23:0]), 4'h0 });
-	always @(posedge i_clk)
-	if ((f_past_valid)&&($past(f_break_seq[1]))&&(state != TXU_BREAK))
-	begin
+	  always @(posedge i_clk)
+	  if ((f_past_valid)&&($past(f_break_seq[1]))&&(state != TXU_BREAK))
+	  begin
 		assert(state == TXU_IDLE);
 		assert(o_uart_tx == 1'b1);
+	  end
 	end
-
+	   
 	always @(*)
 	if (|f_break_seq)
 	begin
@@ -981,11 +1013,13 @@ module txuart(
 	reg	[28:0]		f_counter;
 	initial	f_counter = 0;
 	always @(posedge i_clk)
-	if (!o_busy)
+	if (i_en) begin
+	  if (!o_busy)
 		f_counter <= 1'b0;
-	else
+	  else
 		f_counter <= f_counter + 1'b1;
-
+	end
+	   
 	always @(*)
 	if (f_five_seq[0]|f_six_seq[0]|f_seven_seq[0]|f_eight_seq[0])
 		assert(f_counter == (fsv_setup[23:0] - baud_counter - 1));

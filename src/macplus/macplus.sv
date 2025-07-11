@@ -35,7 +35,7 @@ module macplus
 
 	output [10:0]	       audio,
 
-	output [3:0]	       leds,
+	output [4:0]	       leds,
 
 	//ADC
 	inout [3:0]	       ADC_BUS,
