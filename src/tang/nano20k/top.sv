@@ -513,7 +513,7 @@ macplus macplus (
 );
 
 wire [5:0] leds;
-assign leds[4] = 1'b0;   
+assign leds[4] = !midi_out; // 1'b0;   
 assign leds_n = ~leds;   
 					
 /* -------------------- HDMI video and audio -------------------- */

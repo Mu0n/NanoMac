@@ -98,6 +98,8 @@ module scc
 	reg [5:0] 	wr9;
 	reg [7:0] 	wr10_a;
 	reg [7:0] 	wr10_b;
+	reg [7:0] 	wr11_a;
+	reg [7:0] 	wr11_b;
 	reg [7:0] 	wr12_a;
 	reg [7:0] 	wr12_b;
 	reg [7:0] 	wr13_a;
@@ -378,6 +380,22 @@ module scc
 		end		
 	end
 
+	/* WR11
+	 * Reset: Unchanged
+	 */
+	always@(posedge clk or posedge reset_hw) begin
+		if (reset_hw)
+		  wr11_a <= 0;
+		else if (cen && wreg_a && rindex == 12)
+		  wr11_a <= wdata;
+	end
+	always@(posedge clk or posedge reset_hw) begin
+		if (reset_hw)
+		  wr11_b <= 0;		
+		else if (cen && wreg_b && rindex == 12)
+		  wr11_b <= wdata;
+	end
+
 	/* WR12
 	 * Reset: Unchanged
 	 */
@@ -531,10 +549,12 @@ module scc
 			 };
 	
 	/* RR2 (Chan B only, A is just WR2) */
-	assign rr2_b = { wr2[7],
-			 wr9[4] ? rr2_vec_stat[0] : wr2[6],
-			 wr9[4] ? rr2_vec_stat[1] : wr2[5],
-			 wr9[4] ? rr2_vec_stat[2] : wr2[4],
+        // wr9[4] = status high/low, should actually always be low
+        // TODO: wr9[0] = Vector Include Status (VIS)
+	assign rr2_b = { wr2[7],                               //  A_RX A_RX_S  A_Tx  
+			 wr9[4] ? rr2_vec_stat[0] : wr2[6],    //    0    1       0
+			 wr9[4] ? rr2_vec_stat[1] : wr2[5],    //    1    1       0
+			 wr9[4] ? rr2_vec_stat[2] : wr2[4],    //    1    1       1
 			 wr9[4] ? wr2[3] : rr2_vec_stat[2],
 			 wr9[4] ? wr2[2] : rr2_vec_stat[1],
 			 wr9[4] ? wr2[1] : rr2_vec_stat[0],
@@ -604,116 +624,68 @@ module scc
 	 The TxIP is reset either by writing data to the transmit buffer or by issuing the Reset Tx Int command in WR0
 	 */
 
-reg tx_fin_pre;
+reg tx_busy_aD;
 reg tx_ip;
-reg tx_mip;
+assign tx_irq_pend_a = tx_ip;
 
-/*
-reg tx_ie;
 always @(posedge clk) begin
-	if (reset_a|reset_hw|reset)
-		tx_ie<=0;
-	else if (wreg_a & (rindex == 1) )
-		tx_ie<=wdata[1];
+   if ( reset_a )
+      tx_ip <= 0;
+   else if( cen ) begin
+      // delay tx_busy_a
+      tx_busy_aD <= tx_busy_a;
+
+      // TX enable & TX Int ena & falling edge of tx_busy_a
+      if (wr5_a[3] & wr1_a[1] & ~tx_busy_a & tx_busy_aD)
+	tx_ip <= 1;
+      
+      // write register 0 bits 5:3 == 111 -> Reset Highest IUS
+      if (wreg_a & (rindex == 0) & (wdata[5:3] == 3'b111))
+	tx_ip <= 0;
+
+      // write register 0 bits 5:3 == 101 -> Reset Tx Int Pending
+      if (wreg_a & (rindex == 0) & (wdata[5:3] == 3'b101))
+        tx_ip <= 0;
+
+      // Tx Disabled
+      if (wr5_a[3]==0)
+	tx_ip <= 0;
+   end	
 end
+
+/* figure out the interrupt on / off */
+/* rx enable: wr3_a[0] */
+/* wr1_a  4  3
+          0  0  = rx int disable
+          0  1  = rx int on first char or special
+ 	  1  0  = rx int on all rx chars or special
+	  1  1  = rx int on special cond only
 */
+//                       rx enable   char waiting        01,10 only             first char    
+assign rx_irq_pend_a =   wr3_a[0] & rx_wr_a_latch & (wr1_a[3] ^ wr1_a[4]) & ((wr1_a[3] & rx_first_a )|(wr1_a[4]));
+assign ex_irq_pend_a = ex_irq_ip_a;
 
-always @(posedge clk) begin
-	if (reset) begin
-      tx_ip<=0;
-      tx_mip<=0;
-	end
-	else begin
-      tx_fin_pre<=tx_busy_a;
-		 
-		if (wr5_a[3] &  wr1_a[1] & tx_busy_a & ~tx_fin_pre) begin
-			tx_ip<=~tx_mip;
-			tx_mip<=0;
-		end
-		if (wreg_a & (rindex == 0) & (wdata[5:3] == 3'b111)) begin
-			tx_ip<=0;
-		end
-		if (wreg_a & (rindex == 0) & (wdata[5:3] == 3'b101)) begin
-          // If CIP=1, inhibit generation of next TX interrupt
-          // Actually, "Reset TxInt pend." clears current interrupt
-          tx_mip<= ~tx_ip;
-          tx_ip<=0;
-		end
-		if (wr5_a[3]==0)begin
-			tx_mip<=0;
-			tx_ip<=0;
-		end
-	end	
-end
+assign rx_irq_pend_b = 0;
+assign tx_irq_pend_b = 0; /* Tx always empty for now */
+assign ex_irq_pend_b = ex_irq_ip_b;
 
-
-
-
-
-	 reg tx_busy_a_r;
-	 reg tx_latch_a;
-	 always @(posedge clk) begin
-		tx_busy_a_r <= tx_busy_a;
-		// when we transition from empty to full, we create an interrupt
-		if (reset | reset_hw | reset_a)
-			tx_latch_a<=0;
-		else if  (tx_busy_a_r ==1 && tx_busy_a==0)
-			tx_latch_a<=1;
-		// cleared when we write again
-		else if (wr_data_a)
-			tx_latch_a<=0;
-		// or when we set the reset in wr0
-		else if (wreg_a & (rindex == 0) & (wdata[5:3] == 3'b010))
-			tx_latch_a<=0;
-		//else if (wreg_a & (rindex == 0) & (wdata[5:3] == 3'b111)) // clear highest under service?
-	 end
-
-	 
-	 
-	 wire wreq_n;
-	//assign rx_irq_pend_a =  rx_wr_a_latch & ( (wr1_a[3] &&  ~wr1_a[4])|| (~wr1_a[3] &&  wr1_a[4])) & wr3_a[0];	/* figure out the interrupt on / off */
-	//assign rx_irq_pend_a =  rx_wr_a_latch & ( (wr1_a[3] &  ~wr1_a[4])| (~wr1_a[3] &  wr1_a[4])) & wr3_a[0];	/* figure out the interrupt on / off */
-
-	/* figure out the interrupt on / off */
-	/* rx enable: wr3_a[0] */
-	/* wr1_a  4  3
-	          0  0  = rx int disable
-	          0  1  = rx int on first char or special
-				 1  0  = rx int on all rx chars or special
-				 1  1  = rx int on special cond only
-	*/
-	//                       rx enable   char waiting        01,10 only             first char    
-	assign rx_irq_pend_a =   wr3_a[0] & rx_wr_a_latch & (wr1_a[3] ^ wr1_a[4]) & ((wr1_a[3] & rx_first_a )|(wr1_a[4]));
-
-//	assign tx_irq_pend_a = 0;
-//	assign tx_irq_pend_a = tx_busy_a & wr1_a[1];
-
-	assign tx_irq_pend_a = tx_ip;
-//assign tx_irq_pend_a =  wr1_a[1]; /* Tx always empty for now */
-
-   wire cts_interrupt = wr1_a[0] &&  wr15_a[5] || (tx_busy_a_r ==1 && tx_busy_a==0) || (tx_busy_a_r ==0 && tx_busy_a==1);/* if cts changes */
-
-	assign ex_irq_pend_a = ex_irq_ip_a ; 
-	assign rx_irq_pend_b = 0;
-	assign tx_irq_pend_b = 0 /*& wr1_b[1]*/; /* Tx always empty for now */
-	assign ex_irq_pend_b = ex_irq_ip_b;
-
-	assign _irq = ~(wr9[3] & (rx_irq_pend_a |
-				  
-				  
-				  rx_irq_pend_b |
-				  tx_irq_pend_a |
-				  tx_irq_pend_b |
-				  ex_irq_pend_a |
-				  ex_irq_pend_b));
+//              MIE
+assign _irq = ~(wr9[3] & (rx_irq_pend_a |
+			  rx_irq_pend_b |
+			  tx_irq_pend_a |
+			  tx_irq_pend_b |
+			  ex_irq_pend_a |
+			  ex_irq_pend_b));
 
 	/* XXX Verify that... also missing special receive condition */
 	assign rr2_vec_stat = rx_irq_pend_a ? 3'b110 :
 			      tx_irq_pend_a ? 3'b100 :
 			      ex_irq_pend_a ? 3'b101 :
-			      rx_irq_pend_b ? 3'b010 :
-			      tx_irq_pend_b ? 3'b000 :
-			      ex_irq_pend_b ? 3'b001 : 3'b011;
+			      rx_irq_pend_b ? 3'b010 :           // for now never enabled
+			      tx_irq_pend_b ? 3'b000 :           // for now never enabled
+			      ex_irq_pend_b ? 3'b001 :
+   		           // rs_irq_pend_a ? 3'b111 :           // for now never enabled
+			      3'b011;                            // default
 	
 	/* External/Status interrupt & latch logic */
 	assign do_extreset_a = wreg_a & (rindex == 0) & (wdata[5:3] == 3'b010);
@@ -820,12 +792,17 @@ wire [1:0] bit_per_char_a =
 
 // formula from datasheet: value = clk/(2*baud*clk_mode)-2
 
-wire [15:0] baud_base = {wr13_a,wr12_a}+16'd2;   
-wire [23:0] baud_divid_speed_a = // { 3'b000, baud_base, 4'b0000, 1'b0};   
-	    (wr4_a[7:6] == 2'b00)?{ 7'b0000000, baud_base,      1'b0}:  // clock mode x1
-	    (wr4_a[7:6] == 2'b01)?{ 3'b000, baud_base, 4'b0000, 1'b0}:  // clock mode x16
-	    (wr4_a[7:6] == 2'b10)?{ 2'b00, baud_base, 5'b00000, 1'b0}:  // clock mode x32
-	                          { 1'b0, baud_base, 6'b000000, 1'b0};  // clock mode x64
+wire	   clk_src_trxc = wr11_a[4:3] == 2'b01;
+ 
+wire [16:0] baud_base =
+	    clk_src_trxc?17'd1:
+	    {{wr13_a,wr12_a}+16'd2, 1'b0};   
+   
+wire [23:0] baud_divid_speed_a =
+	    (wr4_a[7:6] == 2'b00)?{ 7'b0000000, baud_base     }:  // clock mode x1
+	    (wr4_a[7:6] == 2'b01)?{ 3'b000, baud_base, 4'b0000}:  // clock mode x16
+	    (wr4_a[7:6] == 2'b10)?{ 2'b00, baud_base, 5'b00000}:  // clock mode x32
+	                          { 1'b0, baud_base, 6'b000000};  // clock mode x64
 
 // The SCC in the MacPlus runs at 3.686 MHz
 // The transmitter and receiver clock is gated
@@ -835,14 +812,18 @@ reg 	   clk_en;
 
 localparam SYSTEM_CLOCK = 32'd15_600_000;
 localparam SCC_CLOCK    =  32'd3_686_000;
+localparam TRxC_CLOCK   =  32'd1_000_000;
 
+// clock seect TRxC / RTxC
+wire [31:0] target_clock = clk_src_trxc?TRxC_CLOCK:SCC_CLOCK; 
+   
 always @(posedge clk) begin
    clk_en <= 1'b0;
 	   
    if(clk_en_cnt < SYSTEM_CLOCK)
-     clk_en_cnt <= clk_en_cnt + SCC_CLOCK;
+     clk_en_cnt <= clk_en_cnt + target_clock;
    else begin
-      clk_en_cnt <= clk_en_cnt - SYSTEM_CLOCK + SCC_CLOCK;
+      clk_en_cnt <= clk_en_cnt - SYSTEM_CLOCK + target_clock;
       clk_en <= 1'b1;
    end
 end
