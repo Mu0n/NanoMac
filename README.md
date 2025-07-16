@@ -21,12 +21,13 @@ Current state:
   * Keyboard and Mouse via USB
   * [Fully simulated](sim)
   * Two SCSI harddisks
-
-Planned features:
   * Serial/WiFi modem support
+  * MIDI support	
 
 ## Videos
 
+  * [NanoMac #5: Cubase MIDI on the FPGA Macintosh Plus](https://www.youtube.com/shorts/UlvpvIBvGq8)
+  * [NanoMac #4: Over a decade of classic Macintosh gaming](https://www.youtube.com/shorts/HzZ7NqMPe5g)	
   * [NanoMac #3: Arkanoid on FPGA Apple Mac Plus](https://www.youtube.com/shorts/oIGm2tQEABU)
   * [NanoMac #2: Mac Plus on a tiny FPGA](https://www.youtube.com/shorts/Lqf23NVxUAg)
   * [NanoMac #1: First boot of Apple Mac Plus on Tang Nano 20k](https://www.youtube.com/shorts/wxhe5facZ5A)
