@@ -214,8 +214,11 @@ always @(posedge clk) begin
 
       // once any activity has stopped, any pending dirty buffer
       // is written back to disk
-      if(!activity && activityD && track_buffer_dirty)
-	track_force_write_back <= 1'b1;      
+
+      // This can cause floppy write back during SCSI IO which in turn
+      // can corrupt floppy and or HDD images
+//      if(!activity && activityD && track_buffer_dirty)
+//	track_force_write_back <= 1'b1;      
       
       case(track_loader_state)
 	// idle state
