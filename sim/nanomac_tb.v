@@ -8,7 +8,7 @@ module nanomac_tb
 
    input [1:0]	    ram_size,
 
-   output [1:0]	    leds,
+   output [4:0]	    leds,
    
    // serial output, mainly for diagrom
    output	    uart_tx,

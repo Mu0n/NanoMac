@@ -13,6 +13,7 @@ module floppy_track_buffer
 
     // iwm/floppy info of currently addressed track
     input [1:0]	      eject,
+    input             activity,	      
     input	      drive, // 0=int, 1=ext
     input	      side,
     input [6:0]	      track, // current track
@@ -130,17 +131,16 @@ wire [9:0] soff =
 reg [7:0]  track_in_buffer;         // track currently stored in buffer (drive/side/track)
 reg [7:0]  track_buffer [24*512];   // max 12 sectors per track and side
 reg [23:0] track_buffer_dirty;      // sectors have been written
-// reg [23:0] track_buffer_timeout;    // time until dirty buffer is flashed
 reg [4:0]  track_loader_sector;     // sector 0..23 within track currently being read
 reg [7:0]  track_loader_state;
 reg [7:0]  track_in_progress;
 reg [3:0]  track_spt;   
+reg	   track_force_write_back;  // disk activity has been stopped while buffer was dirty
 
 // signal a dirty track buffer to e.g. light up a LED
 assign dirty = track_buffer_dirty != 24'h000000;
    
 wire [6:0] track_in_buffer_track = track_in_buffer[6:0];   // track no of track in buffer
-// wire       track_in_buffer_side  = track_in_buffer[7];     // side -"-
 wire	   track_in_buffer_drive = track_in_buffer[7];     // drive -"-
    
 // iowriting indicates that the track in buffer is not the one requested/needed
@@ -185,7 +185,7 @@ wire [7:0] track_requested = ejected[drive]?8'hff:{drive, track};
 // The track buffer signals "ready" whenever the track requested by the mac/iwm/floppy
 // is actually the one that's currently stored in the buffer. Only then can the iwm
 // read or write from and to the buffer 
-assign ready = (track_in_buffer == track_requested);  
+assign ready = (track_in_buffer == track_requested) && !track_force_write_back;
    
 // Read from track buffer. While ready return the data from the buffer to the iwm.
 // Otherwise return data as requested by the sd card as a write may be in progress.
@@ -195,9 +195,10 @@ always @(posedge clk) begin
   if(ready)  data <= track_buffer[rd_addr];
   else       sd_data_out <= track_buffer[{track_sector_to_write, sd_addr}];
 end
-      
+
 // state machine to make sure the correct track is in buffer
 always @(posedge clk) begin
+   reg activityD;   
    reg writeStrobeD;   
    
    if(rst) begin
@@ -205,19 +206,20 @@ always @(posedge clk) begin
       track_loader_state <= 8'd0;
       sd_rd <= 2'b00;
       sd_wr <= 2'b00;
+      track_force_write_back <= 1'b0;      
       track_buffer_dirty <= 24'h000000;      
-//      track_buffer_timeout <= 24'd0;      
    end else begin
-      writeStrobeD <= writeStrobe;      
-      
-//      // decrease track buffer timeout
-//      if (track_buffer_dirty && track_buffer_timeout)
-//	track_buffer_timeout <= track_buffer_timeout - 24'd1;
+      writeStrobeD <= writeStrobe;
+      activityD <= activity;
+
+      // once any activity has stopped, any pending dirty buffer
+      // is written back to disk
+      if(!activity && activityD && track_buffer_dirty)
+	track_force_write_back <= 1'b1;      
       
       case(track_loader_state)
 	// idle state
-	// TODO: fix track buffer dirty timeout handling. It actually collides with other write attempts 
-	0: if((!ready /* || (track_buffer_timeout == 0) && track_buffer_dirty */ ) && !sd_busy && (size[drive] != 32'd0)) begin
+	0: if(!ready && !sd_busy && (size[drive] != 32'd0)) begin
 	   // the wrong track is in buffer, there's a disk in the requested drive
 	   // and the sd card is not busy -> load the right track, but flush any
 	   // dirty sectors before
@@ -237,9 +239,7 @@ always @(posedge clk) begin
 	      // request sd card write
 	      sd_wr <= track_in_buffer_drive?2'b10:2'b01;
 	      track_loader_state <= 8'd5;
-
-//	      track_loader_state <= 8'd6;   // skip actual write
-
+	      
 	   end else if(inserted[drive] && track_requested != 8'hff) begin
 	      track_in_buffer <= 8'hff;      // mark buffer contents invalid
 
@@ -254,6 +254,7 @@ always @(posedge clk) begin
 
 	      track_buffer_dirty <= 24'h000000;      
 	      track_loader_state <= 8'd1;
+	      track_force_write_back <= 1'b0;      
 	   end
 	end else if(ready) begin
 	   // The track is valid and doesn't have to be reloaded. 
@@ -269,7 +270,6 @@ always @(posedge clk) begin
 	   if( writeStrobe ^ writeStrobeD ) begin
 	      logic [4:0] wr_sector = {1'b0,writeSector}+(side?{1'b0,spt}:5'd0);
 	      track_buffer_dirty[wr_sector] <= 1'b1;	      
-//	      track_buffer_timeout <= 24'd8000000;      
 	      track_buffer[{wr_sector, writeAddr}] <= writeDataDecoded;
 	   end
 	end
@@ -336,7 +336,6 @@ always @(posedge clk) begin
 	6: if(!sd_busy) begin
 	   // buffer for this sector not dirty, anymore
 	   track_buffer_dirty[track_sector_to_write] <= 1'b0;
-//	   track_buffer_timeout <= 24'd0;      
 	   track_loader_state <= 8'd0;
 	end 
 	

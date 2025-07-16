@@ -133,6 +133,23 @@ always @(posedge clk) begin
        select <= select0;   // delay select on write one more cycle, so UDS/LDS are active as well
   end
 end
+
+// Check for activity for a second. This signal is being used to flush the
+// write buffer. It seems preferrable to use the motor on signal. But that
+// often seems to stay on (forever?).
+reg [31:0] act_cnt;
+wire	   activity = act_cnt != 32'd0;
+   
+always @(posedge clk) begin
+   if(!_reset)
+     act_cnt <= 32'd0;
+   else if( cen ) begin
+      if(diskAct != 2'b00)
+	act_cnt <= 32'd8_000_000;
+      else if(act_cnt != 32'd0)
+	act_cnt <= act_cnt - 32'd1;
+   end
+end
    
 // we only need a single track buffer since we also only have
 // one iwm which in turn can only access one floppy drive at a time
@@ -143,6 +160,7 @@ floppy_track_buffer fb
 
      .inserted(insertDisk),
      .eject(diskEject),
+     .activity(activity),
      .drive(selectExternalDrive),
      .sides(diskSides),
      .side(selectExternalDrive?sideExt:sideInt),

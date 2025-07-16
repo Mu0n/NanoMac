@@ -28,7 +28,7 @@ extern void sd_handle(float ms, Vnanomac_tb *tb);
 // #define DEBUG_MEM
 
 // times with 128k ram, 512k delays everything by 2.7 seconds
-#define TRACESTART 0.0
+// #define TRACESTART 0.0
 // #define TRACESTART 1.9   // kbd model cmd and first iwm access
 // #define TRACESTART 2.2   // checkerboard, kbd  inquiry cmd, first SCSI
 // #define TRACESTART 2.8   // tachometer calibration (until ~ 2.97)
@@ -37,8 +37,10 @@ extern void sd_handle(float ms, Vnanomac_tb *tb);
 // #define TRACESTART 5.1   // Sony write called
 // #define TRACESTART 20.0   // 128k / system 3.0 desktop reached
 
+#define TRACESTART 21.2
+
 #ifdef TRACESTART
-#define TRACEEND     (TRACESTART + 0.1)
+#define TRACEEND     (TRACESTART + 0.5)
 #endif
 
 // floppy disk lba to side/track/sector translation table
@@ -367,7 +369,10 @@ void tick(int c) {
 
   static  int leds = 0;
   if(leds != tb->leds) {
-    printf("%.3fms LEDs %s/%s\n", simulation_time*1000, (tb->leds&2)?"on":"off", (tb->leds&1)?"on":"off");
+    printf("%.3fms LEDs ", simulation_time*1000);
+    for(int i=0;i<5;i++) printf("%c", (tb->leds&(0x10>>i))?'*':'-');
+    printf("\n");
+
     leds = tb->leds;
   }
   
