@@ -74,7 +74,7 @@ reg [15:0] timer_a_latch = latch_reset_pattern;
 reg [15:0] timer_b_latch = latch_reset_pattern;
 reg [15:0] timer_a_count = latch_reset_pattern;
 reg [15:0] timer_b_count = latch_reset_pattern;
-reg	   timer_a_out;
+wire	   timer_a_out;
 reg	   timer_b_tick;
 
 reg [7:0] acr = 8'h00;   
@@ -151,7 +151,7 @@ always @(posedge clock) begin
       ddrb <= 8'h00;
       irq_mask <= 7'b0000000;
       irq_flags <= 7'b0000000;
-      acr <= 8'h00;
+      acr <= 8'h00; // TODO
       pcr <= 8'h00;
       ca2_handshake_o <= 1'b1;
       ca2_pulse_o     <= 1'b1;
@@ -373,7 +373,7 @@ always @(posedge clock) begin
    end
                 
    if(rising) begin
-      if(irq_events[6] && acr[7]) 
+      if(timer_a_reload && acr[7]) 
         timer_a_toggle <= !timer_a_toggle;
    end
 

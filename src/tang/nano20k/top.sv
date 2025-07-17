@@ -449,7 +449,7 @@ flash flash (
 			  );   
    
 /* -------------------- the MacPlus itself -------------------- */
-wire [10:0] audio;  
+wire [11:0] audio;  
    
 macplus macplus (
     //Master input clock
@@ -513,7 +513,7 @@ macplus macplus (
 );
 
 wire [5:0] leds;
-assign leds[4] = !midi_out; // 1'b0;   
+assign leds[4] = !midi_out;
 assign leds_n = ~leds;   
 					
 /* -------------------- HDMI video and audio -------------------- */
@@ -521,15 +521,16 @@ assign leds_n = ~leds;
 // latch audio, so it's stable during 48khz transfer
 reg [15:0] audio_reg [2];  
 
-// expand from 11 to 16 bits and reduce volume a little bit
-wire [15:0] audio16 = { {3{audio[10]}}, audio[9:0], 3'b000 };   
+// expand from 12 to 16 bits and reduce volume a little bit
+wire [15:0] audio16 = { {3{audio[11]}}, audio, 1'b0 };   
+
+`define AUDIO_RATE 22159
    
-// generate 48khz audio clock
+// generate audio clock
 reg clk_audio;
 reg [8:0] aclk_cnt;
 always @(posedge clk_pixel) begin
-    // divisor = pixel clock / 48000 / 2 - 1
-    if(aclk_cnt < `PIXEL_CLOCK / 48000 / 2 -1)
+    if(aclk_cnt < `PIXEL_CLOCK / `AUDIO_RATE / 2 -1)
       aclk_cnt <= aclk_cnt + 9'd1;
     else begin
        aclk_cnt <= 9'd0;
@@ -591,7 +592,7 @@ video_analyzer video_analyzer (
 `endif
    
 hdmi #(
-    .AUDIO_RATE(48000), .AUDIO_BIT_WIDTH(16),
+    .AUDIO_RATE(`AUDIO_RATE), .AUDIO_BIT_WIDTH(16),
     .VENDOR_NAME( { "MiST", 32'd0} ),
     .PRODUCT_DESCRIPTION( {"NanoMac", 72'd0} )
 ) hdmi(

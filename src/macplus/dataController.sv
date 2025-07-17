@@ -65,7 +65,7 @@ module dataController (
 	output		       vid_alt,
 
 	// audio
-	output [10:0]	       audioOut, // 8 bit audio + 3 bit volume
+	output [11:0]	       audioOut, // 8 bit audio + 3 bit volume + 1 bit filter
 	output		       snd_alt,
 	input		       loadSound,
 	
@@ -140,9 +140,9 @@ module dataController (
         assign sdc_lba = 
 		    scsi_io?scsi_lba[scsi_dev]:
 		    { 21'd0, iwm_lba };   
-   
+
 	// add binary volume levels according to volume setting
-	assign audioOut = 
+	wire [10:0] audioVol = 
 		(snd_vol[0]?audio_x1:11'd0) +
 		(snd_vol[1]?audio_x2:11'd0) +
 		(snd_vol[2]?audio_x4:11'd0);
@@ -151,13 +151,24 @@ module dataController (
 	wire [10:0] audio_x1 = { {3{audio_latch[7]}}, audio_latch };
 	wire [10:0] audio_x2 = { {2{audio_latch[7]}}, audio_latch, 1'b0 };
 	wire [10:0] audio_x4 = {    audio_latch[7]  , audio_latch, 2'b00};
-	
+
+        // a simple low pass 
+        reg [10:0] audioFilterLatch [2];
+        wire [11:0] audioFilter0 = {           {2{audioVol[10]}},         audioVol[10:1]};
+        wire [11:0] audioFilter1 = {   audioFilterLatch[0][10]  , audioFilterLatch[0] };
+        wire [11:0] audioFilter2 = {{2{audioFilterLatch[1][10]}}, audioFilterLatch[1][10:1]};   
+   
+        assign audioOut = audioFilter0 + audioFilter1 + audioFilter2;
+      
 	// read audio data and convert to signed for further volume adjustment
 	reg [7:0] audio_latch;
 	always @(posedge clk) begin
 		if(cycleReady && loadSound) begin
-		        if(snd_ena) audio_latch <= 8'h00; // 8'h7f; // when disabled, drive output high
+		        if(snd_ena) audio_latch <= 8'h7f; // when disabled, drive output high
 			else  	    audio_latch <= ramDataIn[15:8] - 8'd128;
+
+			audioFilterLatch[0] <= audioVol;
+			audioFilterLatch[1] <= audioFilterLatch[0];		   
 		end
 	end
 	

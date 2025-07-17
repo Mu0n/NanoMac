@@ -37,10 +37,11 @@ extern void sd_handle(float ms, Vnanomac_tb *tb);
 // #define TRACESTART 5.1   // Sony write called
 // #define TRACESTART 20.0   // 128k / system 3.0 desktop reached
 
-#define TRACESTART 21.2
+// #define TRACESTART 10.1
+#define TRACESTART 0.0
 
 #ifdef TRACESTART
-#define TRACEEND     (TRACESTART + 0.5)
+#define TRACEEND     (TRACESTART + 0.2)
 #endif
 
 // floppy disk lba to side/track/sector translation table
@@ -186,7 +187,7 @@ void capture_video(void) {
     // trigger on rising hs edge
     if(tb->hs_n) {
       // write audio
-      int16_t audio = tb->audio << 6;
+      int16_t audio = tb->audio << 5;
       if(ad) fwrite(&audio, 1, 2, ad);
       
       // no line in this frame detected, yet

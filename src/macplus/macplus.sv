@@ -33,7 +33,7 @@ module macplus
 	output		       vsync,
 	output		       hsync,
 
-	output [10:0]	       audio,
+	output [11:0]	       audio,
 
 	output [4:0]	       leds,
 

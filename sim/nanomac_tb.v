@@ -17,7 +17,7 @@ module nanomac_tb
    output	    hs_n,
    output	    vs_n,
    output	    pix,
-   output [10:0]    audio,
+   output [11:0]    audio,
 
    output	    _romOE,
    output [17:0]    romAddr, 

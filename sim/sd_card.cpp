@@ -15,7 +15,8 @@
 #include "Vnanomac_tb.h"
 
 const char *file_image[] = {
-  "./FloppyWrite.dsk", // internal floppy
+  "./MacSTBlast.dsk", // internal floppy
+  // "./FloppyWrite.dsk", // internal floppy
   // NULL, // "../disks/system30_minimal_work.dsk", // internal floppy
   NULL, // "../disks/HelloWorld.dsk",            // external floppy
   NULL, // "./boot_work.vhd",                  // SCSI HDD #1
