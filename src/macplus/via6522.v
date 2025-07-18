@@ -373,7 +373,7 @@ always @(posedge clock) begin
    end
                 
    if(rising) begin
-      if(timer_a_reload && acr[7]) 
+      if(irq_events[6] && acr[7]) 
         timer_a_toggle <= !timer_a_toggle;
    end
 
