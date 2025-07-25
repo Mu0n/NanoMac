@@ -69,10 +69,7 @@ is 370 bytes in length and is played synchronous to the Macs video
 output it needs to be updated exactly once per frame, preferrably in
 the VBL interrupt at 60Hz. The second thing that needs to happen is
 that the tunes to be played have to be recalculated every 20ms. This
-should thus happen at 50Hz. For now this is also done in the VBL
-interrupt but skipped one out of six interrupt calls resuling in
-a rather uneven 50Hz rate. This works but is not perfect and may
-the the culprit of some noises and clicks here and there.
+should thus happen at 50Hz.
 
 The entore playback takes place inside the VBL interrupt and takes
 up around 80% of the available CPU time leaving less than 20% for
@@ -95,19 +92,10 @@ Things that should be worked on:
   - Crashes. These seem to happen during the preparation state and
     might be causes by a stack overflow as that stage seeems to
     require siognificant stack space
-  - 50Hz tune recalculation. This currently happens in 5 of 6 60Hz
-    VBL interrupts. This should be done at a constant 50Hz rate using
-    e.g. a VIA6522 timer interrupt. This in turn will then have to
-    run asynchonously to the audio hardware buffer reload which has
-    to happen at 60Hz
   - Optimizations
     - The current version mixes the two signed 8 bit audio channels
       as computed for the STE. Adopting the sample preparation to
       unsigned 7 bit can simplify the mixing during playback
-    - The final binary is rather huge mainly bevcause it contains
-      the unrolled mixer loops with 370 entries each. This may
-      be reduced by e.g. runnng a 10x loop over only 37 unrolled
-      entries at a minor performance impact
     - The Macs hardware supports some audio double buffering using
       the alternate audio buffer. This may be used to directly
       render the samples into the hardware audio buffers allowing

@@ -16,9 +16,9 @@
 /* FREQ = replay frequency (See below)					*/
 /*----------------------------------------------------------------------*/
 /* This version has been adapted to work on classic Apple Macs like     */
-/* the 512k or Plus							*/
+/* the 512k or Plus                                                     */
 /*----------------------------------------------------------------------*/
-
+	
 .text
 	
 .equ MVOL,  0x80
@@ -51,13 +51,15 @@
 .endif
 .endif
 .endif
+.equ SAMPLES, LEN
 .endif
 
 .else
 /* Mac */
-.equ PARTS, 6	
-.equ LEN,   370
-.equ INC,   (3579546/22250*65536)
+.equ PARTS,   5
+.equ LEN,     370
+.equ SAMPLES, LEN/5
+.equ INC,   (3579546/(60*LEN)*65536)
 .endif
 	
 /* ================================================================================ */
@@ -73,6 +75,8 @@ vbl_handler:
  	beq.s      cont_orig
 .endif
 	
+	/* bset.b 	#1, 0xefe1fe */ /* pb[0] as trigger */	
+
 	/* save all registers that may be clobbered */
 	movem.l	%d0-%d1/%a0-%a1,-(%sp)
 
@@ -101,9 +105,11 @@ cp:
 	
 	movem.l (%sp)+,%d0-%d1/%a0-%a1
 	
+/*	bclr.b 	#1, 0xefe1fe */
+
 .ifndef FORWARD_TO_ORIG_IRQ
 	/* =================== exit  ========================= */     
-	move.b 	#2, 0xefe1fe+0x1a00   /* ack vbl irq */
+	move.b 	#2, 0xefe1fe+0x1a00   /* ack irq */
 	rte
 .else
 	/* =================== exit into original handler ========================= */     
@@ -118,7 +124,6 @@ cont_orig:
 /* ================================================================================ */
 /* ================================================================================ */
 
-.ifdef STE
 /*------------------------------- Cut here ------------------------------*/
 /*                   Rout to test replay. May omitted.                   */
 
@@ -139,8 +144,7 @@ cont_orig:
         trap    #1                      /* Terminate */
 	
 /*------------------------------- Cut here ------------------------------*/
-.endif
-	
+
 /*---------------------------------------------------- Interrupts on/off --*/
 .ifdef FORWARD_TO_ORIG_IRQ
 vbl_orig:ds.l	1
@@ -186,6 +190,18 @@ muson:
 
         move    #0x2300,%sr
 .else
+	/* clear audio buffer by setting it to full volume as that is what the */
+	/* moted default also is */
+	move.l  #0x3ffd00, %a0    
+	move.l  #0xff,%d1
+        move.w  #370/2,%d0 
+cllp:
+        movep   %d1,0(%a0)
+        add.l   #1,%a0	
+	dbra	%d0,cllp
+
+	move.b  #0x7d,0xefe1fe + 0x1c00 /* disable all interrupts but but vbl */
+
 .ifdef FORWARD_TO_ORIG_IRQ
 	move.l	0x64, vbl_orig          /* save old handler */
 .endif	
@@ -193,8 +209,6 @@ muson:
 
 	bclr.b  #7,0xefe1fe             /* set pb[7] = 0 to enable audio output */
  	bset.b  #3,0xefe1fe + 0x1e00    /* snd alt = 1 */
-
-	move.b  #0x7d,0xefe1fe + 0x1c00 /* disable all interrupts but vbl */
 
 	movem.l (%sp)+,%d0-%a6
 .endif	
@@ -303,19 +317,96 @@ stereo:
  	bpl.s	nomus
 
  	move.w	#PARTS,count
+
+	bsr	music
+	bsr.s 	sample
 .else
-	/* Mac runs in vbl at 60Hz. So skip every 6th run to */
-	/* update at 50Hz */
- 	subq.w	#1,count
-	bpl.s   domus
-	move.w	#PARTS,count
-	bra.s	nomus
-domus:	
-.endif
+
+	movea.l	samp1(%pc),%a6
 	
+	/* On Mac sample calculates 74 samples and thus needs to be run */
+	/* five times per VBL for the 370 samples the mac expects. The music */
+	/* routine needs to be called every 444 samples.
+
+	/* count repeatedly runs from 5 down to 0 */
+ 	subq.w	#1,count
+
+	cmp	#4,count
+	bne.s	nr0	
+	/* run 0 -> no invocation of music */
+	bsr 	sample
+	bsr 	sample	
+	bsr 	sample	
+	bsr 	sample	
+	bsr 	sample
+	bra.s	s_done
+
+nr0:	cmp	#3,count
+	bne.s	nr1
+	/* run 1 -> invocation of music after first chunk */
+	bsr.s 	sample
+	bsr	music 
+	bsr.s 	sample	
+	bsr.s 	sample	
+	bsr.s 	sample	
+	bsr.s 	sample
+	bra.s	s_done
+	
+nr1:	cmp	#2,count
+	bne.s	nr2
+	/* run 2 -> invocation of music after second chunk */
+	bsr.s 	sample
+	bsr.s 	sample	
+	bsr	music 
+	bsr.s 	sample	
+	bsr.s 	sample	
+	bsr.s 	sample
+	bra.s	s_done
+
+nr2:	cmp	#1,count
+	bne.s	nr3
+	/* run 3 -> invocation of music after third chunk */
+	bsr.s 	sample
+	bsr.s 	sample	
+	bsr.s 	sample	
+	bsr	music 
+	bsr.s 	sample	
+	bsr.s 	sample
+	bra.s	s_done
+
+nr3:	cmp	#0,count
+	bne.s	nr4
+	/* run 4 -> invocation of music after fourth chunk */
+	bsr.s 	sample
+	bsr.s 	sample	
+	bsr.s 	sample	
+	bsr.s 	sample	
+	bsr	music 
+	bsr.s 	sample
+	bra.s	s_done
+
+nr4:	/* run 5 -> invocation of music after fifth/last chunk */
+	bsr.s 	sample
+	bsr.s 	sample	
+	bsr.s 	sample	
+	bsr.s 	sample	
+	bsr.s 	sample
 	bsr	music
 
-nomus:	lea	itab(%pc),%a5
+	move.w	#PARTS,count
+s_done:	
+.endif
+
+nomus:	
+	movem.l	(%sp)+,%d0-%a6
+.ifdef STE
+        rte
+.else
+	rts
+.endif
+
+sample:	
+	lea	itab(%pc),%a5
 	lea	vtab(%pc),%a3
 	moveq	#0,%d0
 	moveq	#0,%d4
@@ -351,11 +442,12 @@ v1:	movea.l	wiz2lc(%pc),%a0
 	move.w	aud3vol(%pc),%d7
 	asl.w	#8,%d7
 	lea	0(%a3,%d7.w),%a3
-
+.ifdef STE	
 	movea.l	samp1(%pc),%a6
+.endif
 	moveq	#0,%d3
 
-	.rept LEN
+	.rept SAMPLES
 	add.w	%a4,%d1
 	addx.w	%d2,%d0
 	add.w	%a5,%d5
@@ -427,10 +519,17 @@ v2:	movea.l	wiz1lc(%pc),%a0
 	asl.w	#8,%d7
 	lea	0(%a3,%d7.w),%a3
 
+.ifdef STE
 	movea.l	samp1(%pc),%a6
+.else
+	/* on mac this routine is called several times */
+	/* and must thus be able to work on different buffer */
+	/* positions and must not use fixed addresses */
+	sub.l   #SAMPLES,%a6
+.endif
 	moveq	#0,%d3
 
-	.rept LEN
+	.rept SAMPLES
 	add.w	%a4,%d1
 	addx.w	%d2,%d0
 	add.w	%a5,%d5
@@ -464,12 +563,7 @@ ok1:	move.w	%d0,wiz1pos
 ok4:	move.w	%d4,wiz4pos
 	move.w	%d5,wiz4frc
 
-	movem.l	(%sp)+,%d0-%a6
-.ifdef STE
-        rte
-.else
 	rts
-.endif
 
 /*-------------------------------------------- Hardware-registers & data --*/
 count:	DC.W PARTS
@@ -1109,7 +1203,6 @@ voice4:	DS.W 10
 
 .globl module_data
 module_data:
-	/* include the mod file itself */
 	.include "../axel_f.mod.s"
 	DS.l	16384*4			/* Workspace*/
 workspc:	DS.W	1
