@@ -40,8 +40,6 @@ binary file into the assembler source code.
 $ ./bin2asm.py axel_f.mod > axel_f.mod.s
 ```
 
-A matching MOD file can e.g. be found [here](https://modarchive.org/index.php?request=view_by_moduleid&query=32394)
-
 With all files in place now, the build itself can be prepared and started.
 
 ```
