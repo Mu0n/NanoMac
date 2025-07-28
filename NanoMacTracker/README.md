@@ -34,10 +34,11 @@ $ cd NanoMac/NanoMacTracker
 ```
 
 The you need to add the MOD track to include for playback. I included a python script to convert the
-binary file into the assembler source code.
+[binary file (AXELF.MOD)](https://modarchive.org/index.php?request=view_by_moduleid&query=32394)
+into the assembler source code.
 
 ```
-$ ./bin2asm.py axel_f.mod > axel_f.mod.s
+$ ./bin2asm.py AXELF.MOD > AXELF.MOD.s
 ```
 
 With all files in place now, the build itself can be prepared and started.
@@ -80,16 +81,15 @@ player is running.
 ## Current state and things to do
 
 The current state is:
-  - The player is playing many MODs with minor clicks and noises
-  - Some MODs play with significant artifacts
+  - The player is playing many MODs quite nicely
+  - Some MODs play with artifacts
   - Some MODs make the player crash
 
 Things that should be worked on:
-  - Clicks, noises and major artifacts. The reason for this is not
-    clear and needs investigation
-  - Crashes. These seem to happen during the preparation state and
-    might be causes by a stack overflow as that stage seeems to
-    require siognificant stack space
+  - Currently the code needs to manually be configured for
+    old MOD format with 15 sample entries or new format allowing
+    for 31 entries. This should be automated
+  - Crashes. These seem to happen during the preparation state
   - Optimizations
     - The current version mixes the two signed 8 bit audio channels
       as computed for the STE. Adopting the sample preparation to

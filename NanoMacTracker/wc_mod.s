@@ -18,8 +18,21 @@
 /* This version has been adapted to work on classic Apple Macs like     */
 /* the 512k or Plus                                                     */
 /*----------------------------------------------------------------------*/
-	
+
 .text
+
+.if 1
+/* old format (15 sample entries) */
+.equ PATTERN_TABLE_OFFSET, 470
+.equ MAX_SAMPLES,           15
+.equ PATTERN_DATA_OFFSET,  600
+
+.else
+.equ PATTERN_TABLE_OFFSET, 950
+.equ MAX_SAMPLES,           31
+.equ PATTERN_DATA_OFFSET, 1084
+	
+.endif	
 	
 .equ MVOL,  0x80
 
@@ -647,18 +660,17 @@ tostack:move.w	-(%a1),-(%a6)
 	movea.l	(%a2),%a0		/* Start of samples*/
 	movea.l	%a0,%a5			/* Save samplestart in a5*/
 
-	moveq	#30,%d7
+	moveq	#MAX_SAMPLES-1,%d7
 
 roop:	move.l	%a0,(%a2)+		/* Sampleposition*/
 
-	tst.w	0x2A(%a1)
+	tst.w	42(%a1)
 	beq.s	samplok			/* Len=0 -> no sample*/
 
-	tst.w	0x2E(%a1)		/* Test repstrt*/
+	tst.w	46(%a1)		        /* Test repstrt*/
 	bne.s	repne			/* Jump if not zero*/
 
-
-repeq:	move.w	0x2A(%a1),%d0		/* Length of sample*/
+repeq:	move.w	42(%a1),%d0		/* Length of sample*/
 	move.w	%d0,%d4
 	subq.w	#1,%d0
 
@@ -670,7 +682,7 @@ fromstk:move.w	(%a6)+,(%a0)+		/* Move all samples back from stack*/
 
 
 
-repne:	move.w	0x2E(%a1),%d0
+repne:	move.w	46(%a1),%d0             /* rep start */
 	move.w	%d0,%d4
 	subq.w	#1,%d0
 
@@ -678,15 +690,15 @@ repne:	move.w	0x2E(%a1),%d0
 get1st:	move.w	(%a4)+,(%a0)+		/* Fetch first part*/
 	dbra	%d0,get1st
 
-	adda.w	0x2A(%a1),%a6		/* Move a6 to next sample*/
-	adda.w	0x2A(%a1),%a6
+	adda.w	42(%a1),%a6		/* Move a6 to next sample*/
+/*	adda.w	42(%a1),%a6  */ /* TODO ??? */    
 
 
 
 rep:	movea.l	%a0,%a5
 	moveq	#0,%d1
 toosmal:movea.l	%a4,%a3
-	move.w	0x30(%a1),%d0
+	move.w	48(%a1),%d0             /* repeat len */
 	subq.w	#1,%d0
 moverep:move.w	(%a3)+,(%a0)+		/* Repeatsample*/
 	addq.w	#2,%d1
@@ -700,11 +712,11 @@ last320:move.w	(%a5)+,(%a0)+		/* Safety 320 bytes*/
 
 done:	add.w	%d4,%d4
 
-	move.w	%d4,0x2A(%a1)		/* length*/
-	move.w	%d1,0x30(%a1)		/* Replen*/
-	clr.w	0x2E(%a1)
+	move.w	%d4,42(%a1)		/* length*/
+	move.w	%d1,48(%a1)		/* Replen*/
+	clr.w	46(%a1)
 
-samplok:lea	0x1E(%a1),%a1
+samplok:lea	30(%a1),%a1             /* next sample */
 	dbra	%d7,roop
 
 	cmp.l	#workspc,%a0
@@ -718,7 +730,8 @@ end_of_samples:	DC.L 0
 
 /*------------------------------------------------------ Main replayrout --*/
 init:	lea	module_data(%pc),%a0
-	lea	0x03B8(%a0),%a1
+
+	lea	PATTERN_TABLE_OFFSET+2(%a0),%a1
 
 	moveq	#0x7F,%d0
 	moveq	#0,%d1
@@ -733,15 +746,15 @@ lop2:	move.b	(%a1)+,%d1
 	lea	samplestarts(%pc),%a1
 	asl.l	#8,%d2
 	asl.l	#2,%d2
-	add.l	#0x043C,%d2
+	add.l	#PATTERN_DATA_OFFSET,%d2
 	add.l	%a0,%d2
 	movea.l	%d2,%a2
 
-	moveq	#0x1E,%d0
+	moveq	#MAX_SAMPLES-1,%d0
 lop3:	clr.l	(%a2)
 	move.l	%a2,(%a1)+
 	moveq	#0,%d1
-	move.w	42(%a0),%d1
+	move.w	42(%a0),%d1   /* sample length */
 	add.l	%d1,%d1
 	adda.l	%d1,%a2
 	adda.l	#0x1E,%a0
@@ -810,9 +823,9 @@ arploop:move.w	0(%a0,%d0.w),%d2
 arp4:	move.w	%d2,0x06(%a3)
 	rts
 
-getnew:	lea	module_data+0x043C(%pc),%a0
-	lea	-0x043C+0x0C(%a0),%a2
-	lea	-0x043C+0x03B8(%a0),%a1
+getnew:	lea	module_data+PATTERN_DATA_OFFSET(%pc),%a0
+	lea	-PATTERN_DATA_OFFSET+12(%a0),%a2                /* TODO: what is at 12 ??? */
+	lea	-PATTERN_DATA_OFFSET+PATTERN_TABLE_OFFSET+2(%a0),%a1
 
 	moveq	#0,%d0
 	move.l	%d0,%d1
@@ -961,9 +974,9 @@ nex:	clr.w	pattpos
 	addq.b	#1,songpos
 	andi.b	#0x7F,songpos
 	move.b	songpos(%pc),%d1
-	cmp.b	module_data+0x03B6(%pc),%d1
+	cmp.b	module_data+PATTERN_TABLE_OFFSET(%pc),%d1
 	bne.s	endr
-	move.b	module_data+0x03B7(%pc),songpos
+	move.b	module_data+PATTERN_TABLE_OFFSET+1(%pc),songpos
 endr:	tst.b	break
 	bne.s	nex
 	rts
@@ -1044,7 +1057,6 @@ nop:	move.w	0x10(%a4),0x06(%a3)
 	rts
 
 checkcom:
-.if 1     /* enabling this enables all special effects like vibrato etc */
 	move.w	0x02(%a4),%d0
 	and.w	#0x0FFF,%d0
 	beq.s	nop
@@ -1067,7 +1079,6 @@ checkcom:
 	move.w	0x10(%a4),0x06(%a3)
 	cmp.b	#0x0A,%d0
 	beq.s	volslide
-.endif
 	rts
 
 volslide:	
@@ -1203,6 +1214,6 @@ voice4:	DS.W 10
 
 .globl module_data
 module_data:
-	.include "../axel_f.mod.s"
+	.include "../AXELF.MOD.s"
 	DS.l	16384*4			/* Workspace*/
-workspc:	DS.W	1
+workspc:DS.W	1

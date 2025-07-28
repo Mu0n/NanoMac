@@ -14,7 +14,6 @@
 volatile uint32_t vbl_test_var = 0;
 
 /* simple text output bypassing all operating system */
-
 static uint32_t *screen_ptr = (uint32_t*)0x3FA700;
 
 void mwrite(char *str, int len) {
@@ -124,6 +123,7 @@ void wprintf(char *fmt, ...) {
 
 // for now the mod is hard coded into the assembler file
 // https://moddingwiki.shikadi.net/wiki/MOD_Format
+// https://github.com/lclevy/unmo3/blob/master/spec/mod.txt
 extern uint8_t module_data[];
 
 extern void muson(void);
