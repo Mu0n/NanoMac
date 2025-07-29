@@ -34,9 +34,9 @@
 	
 .endif	
 	
+.ifdef STE
 .equ MVOL,  0x80
 
-.ifdef STE
 .equ FREQ,  2                           /*  0=6.259, 1=12.517, 2=25.036 */
                                         /*  3=50.072 (MegaSTe/TT)       */
 
@@ -69,6 +69,8 @@
 
 .else
 /* Mac */
+.equ MVOL,  0x100
+
 .equ PARTS,   5
 .equ LEN,     370
 .equ SAMPLES, LEN/5
@@ -88,8 +90,9 @@ vbl_handler:
  	beq.s      cont_orig
 .endif
 	
-	/* save all registers that may be clobbered */
-	movem.l	%d0-%d1/%a0-%a1,-(%sp)
+	/* save address registers which are immediately clobbered */
+	/* save as few as possible for minimal delay before first byte write */
+	movem.l	%a0-%a1,-(%sp)
 
 	/* this initial copy needs to run as fast as possible to make sure the first */
 	/* byte is being written before the hardware reads it */
@@ -97,7 +100,13 @@ vbl_handler:
 	/* copy from audio buffer to hardware */
 	move.l  #0x3ffd00, %a0    
 	move.l  samp1, %a1 
-        move.w  #45, %d0  /* 46*8 = 368 bytes + 2 */
+        move.b  (%a1)+,(%a0)   /* byte 0 */
+        move.b  (%a1)+,2(%a0)  /* byte 1 */
+	addq.l	#4,%a0
+
+	/* save remaining registers being clobbered */
+	movem.l	%d0-%d1,-(%sp)
+        move.w  #45, %d0  /* 46*8 = 368 bytes -> bytes 2-369 */
 cp:
 	/* copy 8 samples per iteration */
         move.l   (%a1)+,%d1
@@ -106,8 +115,6 @@ cp:
         movep.l %d1,8(%a0)
         add.l   #16,%a0
         dbra    %d0,cp     
-        move.b  (%a1)+,(%a0)   /* byte 369 */
-        move.b  (%a1)+,2(%a0)  /* byte 370 */
 	/* audio has been copied to hardware buffer */
 	
 	/* call wizzcat main mod decoder routine */
@@ -471,9 +478,7 @@ v1:	movea.l	wiz2lc(%pc),%a0
 	/* write out first channel data to odd addresses */
 	move.w	%d7,(%a6)+
 .else
-	/* write out first channel data as unsigned byte */
-	eor.b	#0x80,%d7       /* convert to unsigned */
-	lsr.b   #1,%d7          /* divide by two to allow adding of second channel */
+	/* write out first channel data as signed byte */
 	move.b	%d7,(%a6)+
 .endif	
 	.endr
@@ -554,9 +559,9 @@ v2:	movea.l	wiz1lc(%pc),%a0
 	move.b	%d7,(%a6)    /* write second channel sample data */
 	addq.w	#2,%a6
 .else
+	add.b   (%a6),%d7    /* add signed value of precomputed channels 1+2 */
 	eor.b   #0x80,%d7    /* convert to unsigned */
-	lsr.b   #1,%d7       /* divide by 2 */
-	add.b	%d7,(%a6)+   /* add to first channel sample data */	
+	move.b	%d7,(%a6)+   /* store final unsigned value */		
 .endif
 	.endr
 
@@ -695,10 +700,6 @@ rep:	movea.l	%a0,%a5
 	moveq	#0,%d1
 toosmal:movea.l	%a4,%a3
 	move.w	48(%a1),%d0             /* repeat len */
-
-	/* handle repeat len 0 like 1, fixes popcorn  */
-	tst	%d0
-	beq.s 	moverep
 
 	subq.w	#1,%d0
 
@@ -1216,8 +1217,6 @@ voice4:	DS.W 10
  
 .globl module_data, module_data_end
 module_data:
-/*	.include "../popcorn.mod.s" */
-/*	.include "../axel_f.mod.s" */
 	.include "../AXELF.MOD.s"
 module_data_end:
 	ds.b	16*30+4  /* extra space for format conversion (see prepare() function) */
