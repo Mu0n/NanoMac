@@ -21,7 +21,7 @@
 
 .text
 
-.if 1
+.if 0
 /* old format (15 sample entries) */
 .equ PATTERN_TABLE_OFFSET, 470
 .equ MAX_SAMPLES,           15
@@ -88,8 +88,6 @@ vbl_handler:
  	beq.s      cont_orig
 .endif
 	
-	/* bset.b 	#1, 0xefe1fe */ /* pb[0] as trigger */	
-
 	/* save all registers that may be clobbered */
 	movem.l	%d0-%d1/%a0-%a1,-(%sp)
 
@@ -118,8 +116,6 @@ cp:
 	
 	movem.l (%sp)+,%d0-%d1/%a0-%a1
 	
-/*	bclr.b 	#1, 0xefe1fe */
-
 .ifndef FORWARD_TO_ORIG_IRQ
 	/* =================== exit  ========================= */     
 	move.b 	#2, 0xefe1fe+0x1a00   /* ack irq */
@@ -204,13 +200,15 @@ muson:
         move    #0x2300,%sr
 .else
 	/* clear audio buffer by setting it to full volume as that is what the */
-	/* moted default also is */
-	move.l  #0x3ffd00, %a0    
-	move.l  #0xff,%d1
-        move.w  #370/2,%d0 
+	/* muted default also is */
+	move.l  #0x3ffd00,%a0
+	move.l  samp1, %a1 
+	move.w  #0xffff,%d1
+        move.w  #370/2-1,%d0
 cllp:
-        movep   %d1,0(%a0)
-        add.l   #1,%a0	
+        movep   %d1,0(%a0)      /* clear hardware buffer */
+        movew   %d1,(%a1)+      /* clear sample buffer */
+        add.l   #4,%a0
 	dbra	%d0,cllp
 
 	move.b  #0x7d,0xefe1fe + 0x1c00 /* disable all interrupts but but vbl */
@@ -346,7 +344,8 @@ stereo:
 
 	cmp	#4,count
 	bne.s	nr0	
-	/* run 0 -> no invocation of music */
+	/* run 5 -> invocation of music before first chunk */
+	bsr	music
 	bsr 	sample
 	bsr 	sample	
 	bsr 	sample	
@@ -398,13 +397,12 @@ nr3:	cmp	#0,count
 	bsr.s 	sample
 	bra.s	s_done
 
-nr4:	/* run 5 -> invocation of music after fifth/last chunk */
+nr4:	/* run 5 -> no invocation of music */
 	bsr.s 	sample
 	bsr.s 	sample	
 	bsr.s 	sample	
 	bsr.s 	sample	
 	bsr.s 	sample
-	bsr	music
 
 	move.w	#PARTS,count
 s_done:	
@@ -680,14 +678,12 @@ fromstk:move.w	(%a6)+,(%a0)+		/* Move all samples back from stack*/
 
 	bra.s	rep
 
-
-
 repne:	move.w	46(%a1),%d0             /* rep start */
 	move.w	%d0,%d4
 	subq.w	#1,%d0
 
 	movea.l	%a6,%a4
-get1st:	move.w	(%a4)+,(%a0)+		/* Fetch first part*/
+get1st:	move.w	(%a4)+,(%a0)+		/* Fetch first part up and until repeat */
 	dbra	%d0,get1st
 
 	adda.w	42(%a1),%a6		/* Move a6 to next sample*/
@@ -699,7 +695,13 @@ rep:	movea.l	%a0,%a5
 	moveq	#0,%d1
 toosmal:movea.l	%a4,%a3
 	move.w	48(%a1),%d0             /* repeat len */
+
+	/* handle repeat len 0 like 1, fixes popcorn  */
+	tst	%d0
+	beq.s 	moverep
+
 	subq.w	#1,%d0
+
 moverep:move.w	(%a3)+,(%a0)+		/* Repeatsample*/
 	addq.w	#2,%d1
 	dbra	%d0,moverep
@@ -1211,9 +1213,14 @@ voice3:	DS.W 10
 voice4:	DS.W 10
 	DC.W 0x08
 	DS.W 3
-
-.globl module_data
+ 
+.globl module_data, module_data_end
 module_data:
+/*	.include "../popcorn.mod.s" */
+/*	.include "../axel_f.mod.s" */
 	.include "../AXELF.MOD.s"
+module_data_end:
+	ds.b	16*30+4  /* extra space for format conversion (see prepare() function) */
+	
 	DS.l	16384*4			/* Workspace*/
 workspc:DS.W	1

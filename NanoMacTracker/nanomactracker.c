@@ -124,9 +124,49 @@ void wprintf(char *fmt, ...) {
 // for now the mod is hard coded into the assembler file
 // https://moddingwiki.shikadi.net/wiki/MOD_Format
 // https://github.com/lclevy/unmo3/blob/master/spec/mod.txt
-extern uint8_t module_data[];
+extern uint8_t module_data[], module_data_end[];
 
 extern void muson(void);
+
+void info() {
+  // samples
+  uint8_t *p = module_data+20;
+  for(int i=0;i<15;i++) {
+    wprintf("%d %s, len %d, ft %d, vol %d, roff %d, rlen %d\n", i,
+	    p, *(uint16_t*)(p+22), *(int8_t*)(p+24), *(uint8_t*)(p+25), *(uint16_t*)(p+26), *(uint16_t*)(p+28));
+    p+=30;
+  }
+}
+
+/* prepare the given mod data for replay with the Wizzcat routine: */
+/* - convert from original 15 sample format to newer 31 sample format if needed */
+/* - adjust repeat lengths */
+
+void prepare(uint8_t *data, int len) {
+  // check for valid tag (new format only)
+  if( (*(uint32_t*)(data+1080) != 'M.K.') &&
+      (*(uint32_t*)(data+1080) != 'M!K!') && 
+      (*(uint32_t*)(data+1080) != 'FLT4') ) {
+
+    /* copy pattern and sample data from 600 to 1084 */
+    bcopy(data+600, data+1084, len-600);
+
+    /* copy number of patterns, jump position and pattern table*/
+    bcopy(data+470, data+950, 128+2);
+
+    /* clear additional 16 sample entries */
+    bzero(data+20+15*30, 16*30);    
+
+    /* set tag (not really needed by wizzcat player */
+    *(uint32_t*)(data+1080) = 'M.K.';
+  }
+
+  /* check for sample repeat len being 0 */
+  uint8_t *p = module_data+20;
+  for(int i=0;i<15;i++,p+=30)
+    if(*(uint16_t*)(p+28) == 0)
+      *(uint16_t*)(p+28) = 1;
+}
 
 int main(int argc, char** argv) {
 
@@ -142,7 +182,9 @@ int main(int argc, char** argv) {
   wprintf("Wizzcat protracker ported to classic mac\n");
   wprintf("NanoMac version by Till Harbaum\n");
 
-  wprintf("\nSong: %s\n", module_data);   // bytes 0..19 are 0 terminated name
+  prepare(module_data, module_data_end - module_data);
+  
+  wprintf("\nTitle: %s\n", module_data);   // bytes 0..19 are 0 terminated name
 
   vbl_test_var = 0;
   muson();
