@@ -163,7 +163,7 @@ void prepare(uint8_t *data, int len) {
 
   /* check for sample repeat len being 0 */
   uint8_t *p = module_data+20;
-  for(int i=0;i<15;i++,p+=30)
+  for(int i=0;i<31;i++,p+=30)
     if(*(uint16_t*)(p+28) == 0)
       *(uint16_t*)(p+28) = 1;
 }
