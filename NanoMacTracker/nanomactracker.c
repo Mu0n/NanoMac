@@ -128,19 +128,11 @@ extern uint8_t module_data[], module_data_end[];
 
 extern void muson(void);
 
-void info() {
-  // samples
-  uint8_t *p = module_data+20;
-  for(int i=0;i<15;i++) {
-    wprintf("%d %s, len %d, ft %d, vol %d, roff %d, rlen %d\n", i,
-	    p, *(uint16_t*)(p+22), *(int8_t*)(p+24), *(uint8_t*)(p+25), *(uint16_t*)(p+26), *(uint16_t*)(p+28));
-    p+=30;
-  }
-}
-
 /* prepare the given mod data for replay with the Wizzcat routine: */
 /* - convert from original 15 sample format to newer 31 sample format if needed */
 /* - adjust repeat lengths */
+
+extern uint8_t *module_ptr, *workspc;
 
 void prepare(uint8_t *data, int len) {
   // check for valid tag (new format only)
@@ -162,10 +154,59 @@ void prepare(uint8_t *data, int len) {
   }
 
   /* check for sample repeat len being 0 */
-  uint8_t *p = module_data+20;
+  uint8_t *p = data+20;
   for(int i=0;i<31;i++,p+=30)
     if(*(uint16_t*)(p+28) == 0)
       *(uint16_t*)(p+28) = 1;
+
+  module_ptr = data;
+}
+
+#define CHK(n,f) { OSErr e = f; if(e) { wprintf("%s failed with error %d\n", n, e); return NULL; } }
+
+uint8_t *load_mod(void) {
+  short int vref = -1;
+  short int ref;
+  Str255 volName;
+  Str255 name;
+
+  CHK("GetVol()", GetVol(volName, &vref));
+
+  // append song name to volume name
+  memcpy(name, volName, volName[0]+1);  
+  name[name[0]+1] = 0;    
+  strcat(name+1, ":song.mod");
+  name[0] = strlen(name+1);
+  
+  wprintf("\nLoading file: %S\n", name);
+
+  CHK("FSOpen()", FSOpen(name, vref, &ref));
+
+  // get file size
+  CHK("SetFPos()", SetFPos(ref, fsFromLEOF, 0));
+  long size = -1;
+  CHK("GetFPos()", GetFPos(ref, &size));
+  CHK("SetFPos()", SetFPos(ref, fsFromStart, 0));
+
+  wprintf("File size: %d bytes\n", size);  
+
+  /* prepare() needs some additional 484 bytes and there needs */
+  /* to be 64k extra "workspace" for the wizzcat init routines */
+  uint8_t *data = NewPtr(size+484+4*16384+2);
+
+  if(!data) {
+    wprintf("No enough memory\n");
+    return NULL;
+  }
+  
+  CHK("FSRead()", FSRead(ref, &size, data));
+  
+  CHK("FSClose()", FSClose(ref));
+
+  prepare(data, size);
+  workspc = data+size+484+4*16384+2;
+  
+  return data;
 }
 
 int main(int argc, char** argv) {
@@ -181,15 +222,18 @@ int main(int argc, char** argv) {
   wprintf("==============\n");
   wprintf("Wizzcat protracker ported to classic mac\n");
   wprintf("NanoMac version by Till Harbaum\n");
-
-  prepare(module_data, module_data_end - module_data);
-  
-  wprintf("\nTitle: %s\n", module_data);   // bytes 0..19 are 0 terminated name
-
   vbl_test_var = 0;
+
+  /* try to load a mod and use the built-in one if that fails */
+  if(!load_mod())  
+    prepare(module_data, module_data_end - module_data);
+  
+  wprintf("\nTitle: %s\n", module_ptr);   // bytes 0..19 are 0 terminated name
+
   muson();
 
   /* playback now runs in the background in the VBL */
+    
   for(;;)
     wprintf("Playing %d:%d.%d ...\r",
 	    vbl_test_var/3600, ((vbl_test_var%3600)/60), (vbl_test_var%60)/6);

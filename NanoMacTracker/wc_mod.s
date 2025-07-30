@@ -223,7 +223,7 @@ cllp:
 .ifdef FORWARD_TO_ORIG_IRQ
 	move.l	0x64, vbl_orig          /* save old handler */
 .endif	
-	move.l  #vbl_handler, 0x64 	/* overwrite original handler */
+	move.l  #vbl_handler, 0x64	/* overwrite original handler */
 
 	bclr.b  #7,0xefe1fe             /* set pb[7] = 0 to enable audio output */
  	bset.b  #3,0xefe1fe + 0x1e00    /* snd alt = 1 */
@@ -650,16 +650,19 @@ sample1:DS.B LEN
 	
 /*========================================================= EMULATOR END ==*/
 
-prepare:lea	workspc,%a6
+prepare:
+	/* lea	workspc,%a6 */
+	movea.l	workspc,%a6	
 	movea.l	samplestarts(%pc),%a0
 	movea.l	end_of_samples(%pc),%a1
 
 tostack:move.w	-(%a1),-(%a6)
-	cmpa.l	%a0,%a1			/* Move all samples to stack*/
+	cmpa.l	%a0,%a1			/* Move all samples to stack */
 	bgt.s	tostack
 
 	lea	samplestarts(%pc),%a2
-	lea	module_data(%pc),%a1	/* Module*/
+/*	lea	module_data(%pc),%a1 */	/* Module*/
+	movea.l	module_ptr(%pc),%a1	/* Module*/
 	movea.l	(%a2),%a0		/* Start of samples*/
 	movea.l	%a0,%a5			/* Save samplestart in a5*/
 
@@ -722,7 +725,8 @@ done:	add.w	%d4,%d4
 samplok:lea	30(%a1),%a1             /* next sample */
 	dbra	%d7,roop
 
-	cmp.l	#workspc,%a0
+/*	cmp.l	#workspc,%a0 */
+	cmp.l	workspc,%a0
 	bgt.s	nospac
 
 	rts
@@ -732,8 +736,9 @@ nospac:	illegal
 end_of_samples:	DC.L 0
 
 /*------------------------------------------------------ Main replayrout --*/
-init:	lea	module_data(%pc),%a0
-
+init:	/* lea	module_data(%pc),%a0 */
+	movea.l	module_ptr(%pc),%a0
+	
 	lea	PATTERN_TABLE_OFFSET+2(%a0),%a1
 
 	moveq	#0x7F,%d0
@@ -757,16 +762,17 @@ lop2:	move.b	(%a1)+,%d1
 lop3:	clr.l	(%a2)
 	move.l	%a2,(%a1)+
 	moveq	#0,%d1
-	move.w	42(%a0),%d1   /* sample length */
-	add.l	%d1,%d1
+	move.w	42(%a0),%d1   /* sample length in 16 bit words */
+	add.l	%d1,%d1       /* convert to bytes */
 	adda.l	%d1,%a2
-	adda.l	#0x1E,%a0
+	adda.l	#30,%a0       /* skip to next sample header */
 	dbra	%d0,lop3
 
 	move.l	%a2,end_of_samples	/**/
 	rts
 
-music:	lea	module_data(%pc),%a0
+music:	/* lea	module_data(%pc),%a0 */
+	movea.l module_ptr(%pc),%a0
 	addq.w	#0x01,counter
 	move.w	counter(%pc),%d0
 	cmp.w	speed(%pc),%d0
@@ -826,7 +832,9 @@ arploop:move.w	0(%a0,%d0.w),%d2
 arp4:	move.w	%d2,0x06(%a3)
 	rts
 
-getnew:	lea	module_data+PATTERN_DATA_OFFSET(%pc),%a0
+getnew:	/* lea	module_data+PATTERN_DATA_OFFSET(%pc),%a0 */
+	movea.l module_ptr(%pc),%a0
+	adda.l  #PATTERN_DATA_OFFSET,%a0
 	lea	-PATTERN_DATA_OFFSET+12(%a0),%a2                /* TODO: what is at 12 ??? */
 	lea	-PATTERN_DATA_OFFSET+PATTERN_TABLE_OFFSET+2(%a0),%a1
 
@@ -977,9 +985,11 @@ nex:	clr.w	pattpos
 	addq.b	#1,songpos
 	andi.b	#0x7F,songpos
 	move.b	songpos(%pc),%d1
-	cmp.b	module_data+PATTERN_TABLE_OFFSET(%pc),%d1
+	/*	cmp.b	module_data+PATTERN_TABLE_OFFSET(%pc),%d1 */
+	cmp.b	-(PATTERN_DATA_OFFSET-PATTERN_TABLE_OFFSET)(%a0),%d1
 	bne.s	endr
-	move.b	module_data+PATTERN_TABLE_OFFSET+1(%pc),songpos
+	/* move.b	module_data+PATTERN_TABLE_OFFSET+1(%pc),songpos */
+	move.b	-(PATTERN_TABLE_OFFSET-PATTERN_TABLE_OFFSET-1)(%a0),songpos
 endr:	tst.b	break
 	bne.s	nex
 	rts
@@ -1200,7 +1210,7 @@ break:	DC.B 0x00
 pattpos:DC.W 0x00
 
 dmacon:	DC.W 0x00
-samplestarts:	DS.L 0x1F
+samplestarts:	DS.L 31   /* 31 pointer to sample start addresses */
 
 voice1:	DS.W 10
 	DC.W 0x01
@@ -1214,7 +1224,10 @@ voice3:	DS.W 10
 voice4:	DS.W 10
 	DC.W 0x08
 	DS.W 3
- 
+
+.globl module_ptr
+module_ptr: dc.l module_data
+	
 .globl module_data, module_data_end
 module_data:
 	.include "../AXELF.MOD.s"
@@ -1222,4 +1235,7 @@ module_data_end:
 	ds.b	16*30+4  /* extra space for format conversion (see prepare() function) */
 	
 	DS.l	16384*4			/* Workspace*/
-workspc:DS.W	1
+workspcend :DS.W	1
+
+	.globl workspc
+workspc:DC.L	workspcend	
