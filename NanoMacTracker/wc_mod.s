@@ -76,12 +76,15 @@
 .equ SAMPLES, LEN/5
 .equ INC,   (3579546/(60*LEN)*65536)
 .endif
+
+.equ FORWARD_TO_ORIG_IRQ, 1
 	
 /* ================================================================================ */
 /* ================================================================================ */
 
 .ifndef STE
 	.globl muson
+	.globl musoff
 
 vbl_handler:
 .ifdef FORWARD_TO_ORIG_IRQ
@@ -218,10 +221,10 @@ cllp:
         add.l   #4,%a0
 	dbra	%d0,cllp
 
-	move.b  #0x7d,0xefe1fe + 0x1c00 /* disable all interrupts but but vbl */
-
 .ifdef FORWARD_TO_ORIG_IRQ
 	move.l	0x64, vbl_orig          /* save old handler */
+.else	
+	move.b  #0x7d,0xefe1fe + 0x1c00 /* disable all interrupts but but vbl */
 .endif	
 	move.l  #vbl_handler, 0x64	/* overwrite original handler */
 
@@ -246,6 +249,14 @@ musoff:
         clr.b   0xFFFF8901.w             /* Stop DMA */
 
         move    #0x2300,%sr
+.else
+	movem.l %d0-%a6,-(%sp)
+
+.ifdef FORWARD_TO_ORIG_IRQ
+	move.l	vbl_orig, 0x64          /* save old handler */
+.endif	
+	bset.b  #7,0xefe1fe             /* set pb[7] = 1 to disable audio output */
+	movem.l (%sp)+,%d0-%a6
 .endif
         rts
 
