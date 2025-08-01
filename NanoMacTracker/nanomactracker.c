@@ -155,8 +155,8 @@ int main(int argc, char** argv) {
   if(!load_mod())  
     prepare(module_data, module_data_end - module_data);
   
-  // Set song name
-  set_text(dlg, 4, module_ptr);
+  // Set song name -> this doesn't work ...
+  // set_text(dlg, 4, module_ptr);
 
   muson();
   

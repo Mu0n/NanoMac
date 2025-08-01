@@ -108,15 +108,16 @@ vbl_handler:
 	addq.l	#4,%a0
 
 	/* save remaining registers being clobbered */
-	movem.l	%d0-%d1,-(%sp)
-        move.w  #45, %d0  /* 46*8 = 368 bytes -> bytes 2-369 */
+	movem.l	%d0-%d4,-(%sp)
+        move.w  #22, %d0  /* 23*16 = 368 bytes -> bytes 2-369 */
 cp:
-	/* copy 8 samples per iteration */
-        move.l   (%a1)+,%d1
-        movep.l  %d1,0(%a0)
-        move.l  (%a1)+,%d1
-        movep.l %d1,8(%a0)
-        add.l   #16,%a0
+	/* copy 16 samples per iteration */
+        movem.l (%a1)+,%d1-%d4
+        movep.l %d1,0(%a0)
+        movep.l %d2,8(%a0)
+        movep.l %d3,16(%a0)
+        movep.l %d4,24(%a0)
+        add.l   #32,%a0
         dbra    %d0,cp     
 	/* audio has been copied to hardware buffer */
 	
@@ -124,7 +125,7 @@ cp:
         bsr	  stereo
 	add.l #1, vbl_test_var	
 	
-	movem.l (%sp)+,%d0-%d1/%a0-%a1
+	movem.l (%sp)+,%d0-%d4/%a0-%a1
 	
 .ifndef FORWARD_TO_ORIG_IRQ
 	/* =================== exit  ========================= */     
@@ -477,14 +478,14 @@ v1:	movea.l	wiz2lc(%pc),%a0
 	moveq	#0,%d3
 
 	.rept SAMPLES
-	add.w	%a4,%d1
-	addx.w	%d2,%d0
-	add.w	%a5,%d5
-	addx.w	%d6,%d4
-	move.b	0(%a0,%d0.l),%d3
-	move.b	0(%a2,%d3.w),%d7
-	move.b	0(%a1,%d4.l),%d3
-	add.b	0(%a3,%d3.w),%d7
+	add.w	%a4,%d1    /* carry also goes into extended bit */
+	addx.w	%d2,%d0    /* add with previous carry */
+	add.w	%a5,%d5    /* so here */
+	addx.w	%d6,%d4    /* ... */
+	move.b	0(%a0,%d0.l),%d3  /* read sample */
+	move.b	0(%a2,%d3.w),%d7  /* read from volume table */
+	move.b	0(%a1,%d4.l),%d3  /* read sample */
+	add.b	0(%a3,%d3.w),%d7  /* read from volume table */
 .ifdef STE
 	/* write out first channel data to odd addresses */
 	move.w	%d7,(%a6)+
@@ -1245,7 +1246,7 @@ module_data:
 module_data_end:
 	ds.b	16*30+4  /* extra space for format conversion (see prepare() function) */
 	
-	DS.l	16384*4			/* Workspace*/
+	DS.l	16384			/* Workspace*/
 workspcend :DS.W	1
 
 	.globl workspc
