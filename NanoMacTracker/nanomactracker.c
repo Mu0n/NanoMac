@@ -9,6 +9,7 @@
 #include <Quickdraw.h>
 #include <Dialogs.h>
 #include <Fonts.h>
+#include <StandardFile.h>
 
 pascal void ButtonFrameProc(DialogRef dlg, DialogItemIndex itemNo) {
   DialogItemType type;
@@ -22,6 +23,8 @@ pascal void ButtonFrameProc(DialogRef dlg, DialogItemIndex itemNo) {
 }
 
 volatile uint32_t vbl_test_var = 0;
+Str255 name;
+uint8_t *data;
 
 // A demo mod is hard coded into the assembler file
 extern uint8_t module_data[], module_data_end[];
@@ -35,6 +38,7 @@ extern void musoff(void);
 
 extern uint8_t *module_ptr, *workspc;
 
+  
 void prepare(uint8_t *data, int len) {
   // check for valid tag (new format only)
   if( (*(uint32_t*)(data+1080) != 'M.K.') &&
@@ -65,23 +69,37 @@ void prepare(uint8_t *data, int len) {
 
 #define CHK(n,f) { OSErr e = f; if(e) { /* wprintf("%s failed with error %d\n", n, e); */ return NULL; } }
 
-uint8_t *load_mod(void) {
-  short int vref = -1;
+uint8_t *load_mod() {
   short int ref;
-  Str255 volName;
-  Str255 name;
+  //Str255 volName;
+  //Str255 name;
+  SFTypeList myTypes;
 
+  SFReply reply; //used to fetch the answer of a standard file get dialog
+  Point where={50,50}; //location to draw said dialog
+  
+  
+  SFGetFile(where,"\pSelect a MOD file",0L,-1,myTypes,0L,&reply);
+  
+  if(reply.good)
+    {
+		  
+  strcat(name, reply.fName);
+
+/*	
   CHK("GetVol()", GetVol(volName, &vref));
 
   // append song name to volume name
   memcpy(name, volName, volName[0]+1);  
   name[name[0]+1] = 0;    
-  strcat(name+1, ":song.mod");
+  strcat(name+1, reply.fName);
   name[0] = strlen(name+1);
   
   // wprintf("\nLoading file: %S\n", name);
 
-  CHK("FSOpen()", FSOpen(name, vref, &ref));
+*/
+
+  CHK("FSOpen()", FSOpen(reply.fName, reply.vRefNum, &ref));
 
   // get file size
   CHK("SetFPos()", SetFPos(ref, fsFromLEOF, 0));
@@ -93,7 +111,8 @@ uint8_t *load_mod(void) {
 
   /* prepare() needs some additional 484 bytes and there needs */
   /* to be 64k extra "workspace" for the wizzcat init routines */
-  uint8_t *data = NewPtr(size+484+4*16384+2);
+  if(data != NULL) DisposePtr(data);
+  data = NewPtr(size+484+4*16384+2);
 
   if(!data) {
     /* wprintf("No enough memory\n"); */
@@ -106,8 +125,9 @@ uint8_t *load_mod(void) {
 
   prepare(data, size);
   workspc = data+size+484+4*16384+2;
-  
   return data;
+ }
+ return NULL;
 }
 
 void set_text(DialogPtr dlg, int item, char *text) {
@@ -133,9 +153,9 @@ int main(int argc, char** argv) {
   TEInit();
   InitDialogs(NULL);
   
+  
   DialogPtr dlg = GetNewDialog(128,0,(WindowPtr)-1);
   InitCursor();
-  //  SelectDialogItemText(dlg,4,0,32767);
   
   DialogItemType type;
   Handle itemH;
@@ -144,7 +164,7 @@ int main(int argc, char** argv) {
   // bold border for Quit button
   GetDialogItem(dlg, 2, &type, &itemH, &box);
   SetDialogItem(dlg, 2, type, (Handle) NewUserItemUPP(&ButtonFrameProc), &box);
-
+  
   // ==== init tracker ====
 
   // this test variable is just incremented by the player code
@@ -152,11 +172,22 @@ int main(int argc, char** argv) {
   vbl_test_var = 0;
 
   /* try to load a mod and use the built-in one if that fails */
-  if(!load_mod())  
+  if(!load_mod()) 
+  {	  
     prepare(module_data, module_data_end - module_data);
+    //swap in the name in the dialog box
+  GetDialogItem(dlg, 4, &type, &itemH, &box);
+  SetDialogItemText(itemH,"\pAXELF.MOD");
+  }
+  else
+  {
+  //swap in the name in the dialog box
+  GetDialogItem(dlg, 4, &type, &itemH, &box);
+  SetDialogItemText(itemH,name);
+  }
   
   // Set song name -> this doesn't work ...
-  // set_text(dlg, 4, module_ptr);
+  //set_text(dlg, 4, module_ptr);
 
   muson();
   
@@ -165,6 +196,32 @@ int main(int argc, char** argv) {
   short item;
   do {
     ModalDialog(NULL, &item);
+	
+	if(item == 5) //a new song is selected
+	{
+		musoff();
+  
+		  /* try to load a mod and use the built-in one if that fails */
+		  if(!load_mod()) 
+		  {	  
+			prepare(module_data, module_data_end - module_data);
+			//swap in the name in the dialog box
+		  GetDialogItem(dlg, 4, &type, &itemH, &box);
+		  SetDialogItemText(itemH,"\pAXELF.MOD");
+		  }
+		  else
+		  {
+		  //swap in the name in the dialog box
+		  GetDialogItem(dlg, 4, &type, &itemH, &box);
+		  SetDialogItemText(itemH,name);
+		  }
+		  //swap in the name in the dialog box
+		  GetDialogItem(dlg, 4, &type, &itemH, &box);
+		  //GetDialogItemText(itemH,4,
+		  SetDialogItemText(itemH,name);
+
+		muson();
+	}
   } while(item != 1);
 
   musoff();

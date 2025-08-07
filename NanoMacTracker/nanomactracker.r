@@ -28,6 +28,9 @@ resource 'DITL' (128) {
 
 		{ 40, 10, 56, 310 },
 		StaticText { enabled, "..." };
+		
+		{ 190-10-20-40, 320-10-80, 190-10-40, 320-10 },
+		Button { enabled, "Load" };
 	}
 };
 
