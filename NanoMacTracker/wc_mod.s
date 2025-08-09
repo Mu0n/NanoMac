@@ -78,38 +78,63 @@
 .endif
 
 .equ FORWARD_TO_ORIG_IRQ, 1
-	
+.equ optEmbedAxelF, 1
+.equ optTstSamp1, 1
+
 /* ================================================================================ */
 /* ================================================================================ */
 
 .ifndef STE
 	.globl muson
 	.globl musoff
+	.globl musdis
+	.globl musen
+	.globl vblHook
 
 vbl_handler:
 .ifdef FORWARD_TO_ORIG_IRQ
 	/* check if this actally is a vbl irq. */
  	btst.b #1, 0xefe1fe + 0x1a00
- 	beq.s      cont_orig
+ 	beq.s      cont_orig /* not a vbl, so do next irq.*/
 .endif
 	
+.ifdef optTstSamp1
+	tst.l samp1 /* 16 cycles */
+	beq.s cont_orig  /* 10 cycles (taken) vs 8 cycles no jump */
+	move.b sample1(%pc),0x3ffd00 /* 20 cycles */
+	/* Total so far: 44c cycles, 20c shorter, but we have 
+		45us free now=337.5 cycles of which 128 are taken by video,
+		leaving 209 cycles for the next write.
+		Actually CPU at 7.8336 => 352.5 cycles, 128 taken by video => 224 free.
+	 */
+	movem.l	%d0-%d4/%a0-%a1,-(%sp) /* 64 cycles. */
+	move.l  samp1, %a1 /* 16 cycles */
+	addq.l #1,%a1 /* 8 cycles */
+	move.l #0x3ffd00+2,%a0 /* 12 cycles */
+	move.b (%a1)+,(%a0) /* 12 cycles*/
+	addql #2,%a0 /* 8 cycles. 164 cycles total, 28 longer. */
+.else
 	/* save address registers which are immediately clobbered */
 	/* save as few as possible for minimal delay before first byte write */
-	movem.l	%a0-%a1,-(%sp)
+	movem.l	%a0-%a1,-(%sp) /* 24 cycles. */
 
 	/* this initial copy needs to run as fast as possible to make sure the first */
 	/* byte is being written before the hardware reads it */
 
 	/* copy from audio buffer to hardware */
-	move.l  #0x3ffd00, %a0    
-	move.l  samp1, %a1 
-        move.b  (%a1)+,(%a0)   /* byte 0 */
-        move.b  (%a1)+,2(%a0)  /* byte 1 */
-	addq.l	#4,%a0
-
+	move.l  samp1, %a1 /* 16 cycles */
+	move.l  #0x3ffd00, %a0    /* 12 cycles */
+	move.b  (%a1)+,(%a0)   /* byte 0, 12 cycles */
+	/* So here, we're already 64 cycles in; about 8us, but now we have another
+		45us before we need to complete the next write.
+	 */
+	move.b  (%a1)+,2(%a0)  /* byte 1 16 cycles */
+	addq.l	#4,%a0 /* 8 cycles */
 	/* save remaining registers being clobbered */
-	movem.l	%d0-%d4,-(%sp)
-        move.w  #22, %d0  /* 23*16 = 368 bytes -> bytes 2-369 */
+	movem.l	%d0-%d4,-(%sp) /* 48 cycles, 136 cycles total */
+.endif
+
+    move.w  #22, %d0  /* 23*16 = 368 bytes -> bytes 2-369 */
 cp:
 	/* copy 16 samples per iteration */
         movem.l (%a1)+,%d1-%d4
@@ -214,14 +239,15 @@ muson:
 	/* muted default also is */
 	move.l  #0x3ffd00,%a0
 	move.l  samp1, %a1 
-	move.w  #0xffff,%d1
-        move.w  #370/2-1,%d0
+	move.w  #0x8080,%d1 /* half volume is off */
+    move.w  #370/2-1,%d0
 cllp:
         movep   %d1,0(%a0)      /* clear hardware buffer */
-        movew   %d1,(%a1)+      /* clear sample buffer */
+        move.w   %d1,(%a1)+      /* clear sample buffer */
         add.l   #4,%a0
 	dbra	%d0,cllp
 
+.if 0
 .ifdef FORWARD_TO_ORIG_IRQ
 	move.l	0x64, vbl_orig          /* save old handler */
 .else	
@@ -230,11 +256,26 @@ cllp:
 	move.l  #vbl_handler, 0x64	/* overwrite original handler */
 
 	bclr.b  #7,0xefe1fe             /* set pb[7] = 0 to enable audio output */
- 	bset.b  #3,0xefe1fe + 0x1e00    /* snd alt = 1 */
+.endif
+ 	bset.b  #3,0xefe1fe + 0x1e00    /* snd alt = 1, selects main audio buffer */
 
 	movem.l (%sp)+,%d0-%a6
 .endif	
         rts
+
+vblHook:
+	movem.w %d0,-(%sp)
+	move %sr,%d0 /* save old SR */
+	ori #0x700,%sr /* Disable all interrupts */
+.ifdef FORWARD_TO_ORIG_IRQ
+	move.l	0x64, vbl_orig          /* save old handler */
+.else	
+	move.b  #0x7d,0xefe1fe + 0x1c00 /* disable all interrupts but but vbl */
+.endif	
+	move.l  #vbl_handler, 0x64	/* overwrite original handler */
+	move %d0,%sr /* restore interrupts */
+	movem.w (%sp)+,%d0
+	rts
 
 musoff:
 .ifdef STE
@@ -251,15 +292,21 @@ musoff:
 
         move    #0x2300,%sr
 .else
-	movem.l %d0-%a6,-(%sp)
 
+	/* movem.l %d0-%a6,-(%sp) */
 .ifdef FORWARD_TO_ORIG_IRQ
 	move.l	vbl_orig, 0x64          /* save old handler */
 .endif	
+
+musdis:
 	bset.b  #7,0xefe1fe             /* set pb[7] = 1 to disable audio output */
-	movem.l (%sp)+,%d0-%a6
+	/* movem.l (%sp)+,%d0-%a6 */
 .endif
         rts
+
+musen:
+	bclr.b  #7,0xefe1fe             /* set pb[7] = 1 to disable audio output */
+	rts
 
 .ifdef STE
 oldtima:DC.L 0
@@ -647,6 +694,8 @@ dmactrl:DC.W 0
 
 dummy:	DC.L 0
 
+.globl samp1
+
 .ifdef STE
 /* two 2*8 bit stereo buffers for STE */	
 samp1:	DC.L sample1
@@ -663,7 +712,6 @@ sample1:DS.B LEN
 /*========================================================= EMULATOR END ==*/
 
 prepare:
-	/* lea	workspc,%a6 */
 	movea.l	workspc,%a6	
 	movea.l	samplestarts(%pc),%a0
 	movea.l	end_of_samples(%pc),%a1
@@ -673,7 +721,6 @@ tostack:move.w	-(%a1),-(%a6)
 	bgt.s	tostack
 
 	lea	samplestarts(%pc),%a2
-/*	lea	module_data(%pc),%a1 */	/* Module*/
 	movea.l	module_ptr(%pc),%a1	/* Module*/
 	movea.l	(%a2),%a0		/* Start of samples*/
 	movea.l	%a0,%a5			/* Save samplestart in a5*/
@@ -737,7 +784,6 @@ done:	add.w	%d4,%d4
 samplok:lea	30(%a1),%a1             /* next sample */
 	dbra	%d7,roop
 
-/*	cmp.l	#workspc,%a0 */
 	cmp.l	workspc,%a0
 	bgt.s	nospac
 
@@ -748,7 +794,7 @@ nospac:	illegal
 end_of_samples:	DC.L 0
 
 /*------------------------------------------------------ Main replayrout --*/
-init:	/* lea	module_data(%pc),%a0 */
+init:
 	movea.l	module_ptr(%pc),%a0
 	
 	lea	PATTERN_TABLE_OFFSET+2(%a0),%a1
@@ -783,7 +829,7 @@ lop3:	clr.l	(%a2)
 	move.l	%a2,end_of_samples	/**/
 	rts
 
-music:	/* lea	module_data(%pc),%a0 */
+music:
 	movea.l module_ptr(%pc),%a0
 	addq.w	#0x01,counter
 	move.w	counter(%pc),%d0
@@ -844,7 +890,7 @@ arploop:move.w	0(%a0,%d0.w),%d2
 arp4:	move.w	%d2,0x06(%a3)
 	rts
 
-getnew:	/* lea	module_data+PATTERN_DATA_OFFSET(%pc),%a0 */
+getnew:
 	movea.l module_ptr(%pc),%a0
 	adda.l  #PATTERN_DATA_OFFSET,%a0
 	lea	-PATTERN_DATA_OFFSET+12(%a0),%a2                /* TODO: what is at 12 ??? */
@@ -997,10 +1043,10 @@ nex:	clr.w	pattpos
 	addq.b	#1,songpos
 	andi.b	#0x7F,songpos
 	move.b	songpos(%pc),%d1
-	/*	cmp.b	module_data+PATTERN_TABLE_OFFSET(%pc),%d1 */
+	
 	cmp.b	-(PATTERN_DATA_OFFSET-PATTERN_TABLE_OFFSET)(%a0),%d1
 	bne.s	endr
-	/* move.b	module_data+PATTERN_TABLE_OFFSET+1(%pc),songpos */
+	
 	move.b	-(PATTERN_TABLE_OFFSET-PATTERN_TABLE_OFFSET-1)(%a0),songpos
 endr:	tst.b	break
 	bne.s	nex
@@ -1238,11 +1284,12 @@ voice4:	DS.W 10
 	DS.W 3
 
 .globl module_ptr
-module_ptr: dc.l module_data
-	
-.globl module_data, module_data_end
+module_ptr:DC.L	module_data
 module_data:
+.if optEmbedAxelF
+.globl module_data, module_data_end
 	.include "../AXELF.MOD.s"
+.endif
 module_data_end:
 	ds.b	16*30+4  /* extra space for format conversion (see prepare() function) */
 	
